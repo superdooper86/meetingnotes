@@ -49,22 +49,22 @@ private final class LocalAPIConnection {
     }
 
     private func receive() {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 16_384) { data, _, isComplete, error in
-            if let data { buffer.append(data) }
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 16_384) { [self] data, _, isComplete, error in
+            if let data { self.buffer.append(data) }
 
-            if buffer.range(of: Data("\r\n\r\n".utf8)) != nil {
-                handleRequest()
+            if self.buffer.range(of: Data("\r\n\r\n".utf8)) != nil {
+                self.handleRequest()
                 return
             }
-            if buffer.count > 64 * 1024 {
-                send(.json(status: 413, reason: "Payload Too Large", ["error": "request headers are too large"]))
+            if self.buffer.count > 64 * 1024 {
+                self.send(.json(status: 413, reason: "Payload Too Large", ["error": "request headers are too large"]))
                 return
             }
             if isComplete || error != nil {
-                connection.cancel()
+                self.connection.cancel()
                 return
             }
-            receive()
+            self.receive()
         }
     }
 
