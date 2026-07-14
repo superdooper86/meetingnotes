@@ -24,6 +24,15 @@ jobs:
           ONLY_ACTIVE_ARCH=NO
           CODE_SIGNING_ALLOWED=NO
           build
+      - name: Sign test build
+        run: |
+          app_path="$RUNNER_TEMP/DerivedData/Build/Products/Release/Meetingnotes.app"
+          codesign --force --deep --sign - \
+            --entitlements meetingnotes/meetingnotes.entitlements \
+            "$app_path"
+          codesign --verify --deep --strict "$app_path"
+          codesign -d --entitlements :- "$app_path" 2>&1 \
+            | grep -q 'com.apple.security.network.server'
       - name: Smoke test local API
         run: |
           defaults write owen.meetingnotes muteDeckAPIEnabled -bool true
@@ -44,7 +53,6 @@ jobs:
       - name: Package test build
         run: |
           app_path="$RUNNER_TEMP/DerivedData/Build/Products/Release/Meetingnotes.app"
-          codesign --force --deep --sign - "$app_path"
           ditto -c -k --sequesterRsrc --keepParent \
             "$app_path" "$RUNNER_TEMP/Meetingnotes-macOS.zip"
       - name: Upload test build
