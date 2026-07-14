@@ -3,6 +3,8 @@ name: Build
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -15,16 +17,18 @@ jobs:
           xcodebuild
           -project Meetingnotes.xcodeproj
           -scheme meetingnotes
-          -configuration Debug
-          -destination 'platform=macOS'
+          -configuration Release
+          -destination 'generic/platform=macOS'
           -derivedDataPath "$RUNNER_TEMP/DerivedData"
+          ARCHS="arm64 x86_64"
+          ONLY_ACTIVE_ARCH=NO
           CODE_SIGNING_ALLOWED=NO
           build
       - name: Smoke test local API
         run: |
           defaults write owen.meetingnotes muteDeckAPIEnabled -bool true
           defaults write owen.meetingnotes muteDeckAPIPort -int 19880
-          "$RUNNER_TEMP/DerivedData/Build/Products/Debug/Meetingnotes.app/Contents/MacOS/Meetingnotes" >"$RUNNER_TEMP/meetingnotes.log" 2>&1 &
+          "$RUNNER_TEMP/DerivedData/Build/Products/Release/Meetingnotes.app/Contents/MacOS/Meetingnotes" >"$RUNNER_TEMP/meetingnotes.log" 2>&1 &
           app_pid=$!
           trap 'kill "$app_pid" 2>/dev/null || true' EXIT
 
@@ -37,3 +41,15 @@ jobs:
 
           grep -q '"name":"MeetingDebrief"' "$RUNNER_TEMP/api-info.json"
           test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:19880/api/recording/status)" = "401"
+      - name: Package test build
+        run: |
+          app_path="$RUNNER_TEMP/DerivedData/Build/Products/Release/Meetingnotes.app"
+          codesign --force --deep --sign - "$app_path"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$app_path" "$RUNNER_TEMP/Meetingnotes-macOS.zip"
+      - name: Upload test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Meetingnotes-macOS-${{ github.sha }}
+          path: ${{ runner.temp }}/Meetingnotes-macOS.zip
+          retention-days: 30
