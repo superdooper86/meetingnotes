@@ -7,15 +7,43 @@ class SettingsViewModel: ObservableObject {
     @Published var saveMessage = ""
     @Published var showingSaveMessage = false
     @Published var templates: [NoteTemplate] = []
+    @Published var coderModels: [CoderModel] = []
+    @Published var isLoadingModels = false
+    @Published var connectionMessage = ""
     
     init() {
         loadTemplates()
     }
     
-    /// Loads the API key from keychain (only called when actually needed)
+    /// Loads the Coder service token from Keychain.
     func loadAPIKey() {
-        if settings.openAIKey.isEmpty {
-            settings.openAIKey = KeychainHelper.shared.getAPIKey() ?? ""
+        if settings.coderAPIKey.isEmpty {
+            settings.coderAPIKey = KeychainHelper.shared.getCoderAPIKey() ?? ""
+        }
+    }
+
+    @MainActor
+    func refreshModels() async {
+        isLoadingModels = true
+        connectionMessage = ""
+        defer { isLoadingModels = false }
+        do {
+            coderModels = try await CoderAPIClient.shared.models(
+                baseURL: settings.coderBaseURL,
+                apiKey: settings.coderAPIKey
+            )
+            let chatModels = coderModels.filter(\.supportsChat)
+            let transcriptionModels = coderModels.filter(\.supportsTranscription)
+            if !chatModels.contains(where: { $0.id == settings.notesModel }), let first = chatModels.first {
+                settings.notesModel = first.id
+            }
+            if !transcriptionModels.contains(where: { $0.id == settings.transcriptionModel }), let first = transcriptionModels.first {
+                settings.transcriptionModel = first.id
+            }
+            connectionMessage = "Connected to Coder"
+        } catch {
+            coderModels = []
+            connectionMessage = error.localizedDescription
         }
     }
     
@@ -55,10 +83,10 @@ class SettingsViewModel: ObservableObject {
 
         // Only save API key to keychain - other values are automatically saved to UserDefaults
         // via computed properties when they're modified
-        let openAISaved = KeychainHelper.shared.saveAPIKey(settings.openAIKey)
+        let coderSaved = KeychainHelper.shared.saveCoderAPIKey(settings.coderAPIKey)
 
         if showMessage {
-            if openAISaved {
+            if coderSaved {
                 saveMessage = "Settings saved successfully!"
             } else {
                 saveMessage = "Error saving settings"

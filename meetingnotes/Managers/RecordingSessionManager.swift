@@ -8,6 +8,7 @@ class RecordingSessionManager: ObservableObject {
     static let shared = RecordingSessionManager()
     
     @Published var isRecording = false
+    @Published var isProcessing = false
     @Published var activeMeetingId: UUID?
     @Published var errorMessage: String?
     @Published var activeRecordingTranscriptChunksUpdated: [TranscriptChunk] = []
@@ -32,6 +33,12 @@ class RecordingSessionManager: ObservableObject {
             }
             .store(in: &cancellables)
         
+        audioManager.$isProcessing
+            .sink { [weak self] isProcessing in
+                self?.isProcessing = isProcessing
+            }
+            .store(in: &cancellables)
+
         audioManager.$errorMessage
             .sink { [weak self] errorMessage in
                 self?.errorMessage = errorMessage
@@ -75,16 +82,24 @@ class RecordingSessionManager: ObservableObject {
         audioManager.startRecording()
     }
     
-    func stopRecording() {
+    func stopRecording() async -> [TranscriptChunk] {
         print("🛑 Stopping recording for meeting: \(activeMeetingId?.uuidString ?? "unknown")")
         
-        audioManager.stopRecording()
-        
-        // Perform a final, immediate save of transcript chunks to the meeting
-        if let activeMeetingId = activeMeetingId {
-            updateActiveMeetingTranscript(meetingId: activeMeetingId, chunks: activeRecordingTranscriptChunks)
+        guard let meetingId = activeMeetingId else {
+            audioManager.cancelRecording()
+            return []
         }
+        let chunks = await audioManager.stopRecordingAndTranscribe()
+        activeRecordingTranscriptChunks = chunks
+        activeRecordingTranscriptChunksUpdated = chunks
+        updateActiveMeetingTranscript(meetingId: meetingId, chunks: chunks)
+        activeMeetingId = nil
+        activeRecordingTranscriptChunks = []
+        return chunks
+    }
         
+    func cancelRecording() {
+        audioManager.cancelRecording()
         activeMeetingId = nil
         activeRecordingTranscriptChunks = []
     }

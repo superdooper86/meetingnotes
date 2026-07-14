@@ -321,7 +321,7 @@ struct MeetingDetailContentView: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        .disabled(viewModel.meeting.transcript.isEmpty || viewModel.isGeneratingNotes || viewModel.isRecording || viewModel.isStartingRecording)
+                        .disabled(viewModel.meeting.transcript.isEmpty || viewModel.isGeneratingNotes || viewModel.isRecording || viewModel.isProcessing || viewModel.isStartingRecording)
                         .help("Generate enhanced notes using a template")
                         
                         // Recording Button
@@ -329,8 +329,14 @@ struct MeetingDetailContentView: View {
                             viewModel.toggleRecording()
                         }) {
                             HStack(spacing: 4) {
-                                Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "record.circle")
-                                    .foregroundColor(viewModel.isRecording ? .red : .accentColor)
+                                if viewModel.isProcessing {
+                                    ProgressView()
+                                        .scaleEffect(0.55)
+                                        .frame(width: 14, height: 14)
+                                } else {
+                                    Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "record.circle")
+                                        .foregroundColor(viewModel.isRecording ? .red : .accentColor)
+                                }
                                 Text(viewModel.recordingButtonText)
                             }
                             .frame(minWidth: 110, minHeight: 36)
@@ -347,7 +353,7 @@ struct MeetingDetailContentView: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        .disabled(cannotStartRecording || viewModel.isValidatingKey || viewModel.isStartingRecording)
+                        .disabled(cannotStartRecording || viewModel.isValidatingKey || viewModel.isStartingRecording || viewModel.isProcessing)
                         .help(cannotStartRecording ? "Another meeting is currently being recorded" : "Start or stop recording for this meeting")
                     }
                 }

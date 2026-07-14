@@ -100,14 +100,14 @@ Instructions for cloning the repo, installing packages, configuring environment 
 Implemented:
 
 - Recording mic & system audio
-- Live transcript
+- End-of-meeting transcription through your Coder service
 - Ability to also write down additional notes
 - AI generated enhanced notes
 - Copy functionality
 - Meeting deletion functionality
 - Meeting search functionality
 - Abilty to edit system prompt
-- Use your own API key
+- Select any compatible Coder model for transcription and note generation
 - Auto updates
 - Text formatting
 - Different note templates
@@ -116,7 +116,7 @@ Implemented:
 
 Todo:
 
-- check for funds / validity of openai api key
+- improve provider balance and token validation errors
 - add padding to text inputs
 - add confirmation when clicking the copy button
 
@@ -125,8 +125,6 @@ Later:
 - Cool recording indicator (dancing bars)
 - Connecting to your Google calendar
 - AI chat for asking questions about a meeting
-- Ability to use different models
-- Ability to use different STT providers
 - Integrations for email, Slack, Notion, etc.
 
 ## Local Development

@@ -1,0 +1,21 @@
+name: Build
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Meetingnotes
+        run: >-
+          xcodebuild
+          -project Meetingnotes.xcodeproj
+          -scheme meetingnotes
+          -configuration Debug
+          -destination 'platform=macOS'
+          CODE_SIGNING_ALLOWED=NO
+          build

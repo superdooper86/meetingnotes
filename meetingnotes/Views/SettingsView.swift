@@ -13,19 +13,50 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                // API Configuration Section
+                // Coder service configuration
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("OpenAI API Key")
+                    Text("Coder Service")
                         .font(.headline)
                         .foregroundColor(.primary)
 
-                    Text("Stored locally and encrypted in Keychain.")
+                    TextField("http://coder-host:8787/v1", text: $viewModel.settings.coderBaseURL)
+                        .textFieldStyle(.roundedBorder)
+                    
+                    SecureField("Service token", text: $viewModel.settings.coderAPIKey)
+                        .textFieldStyle(.roundedBorder)
+
+                    HStack {
+                        Button {
+                            Task { await viewModel.refreshModels() }
+                        } label: {
+                            Label(viewModel.isLoadingModels ? "Loading" : "Refresh Models", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(viewModel.isLoadingModels)
+
+                        if !viewModel.connectionMessage.isEmpty {
+                            Text(viewModel.connectionMessage)
+                                .font(.caption)
+                                .foregroundColor(viewModel.coderModels.isEmpty ? .red : .secondary)
+                        }
+                    }
+
+                    if !viewModel.coderModels.isEmpty {
+                        Picker("Notes model", selection: $viewModel.settings.notesModel) {
+                            ForEach(viewModel.coderModels.filter(\.supportsChat)) { model in
+                                Text(model.displayName).tag(model.id)
+                            }
+                        }
+
+                        Picker("Transcription model", selection: $viewModel.settings.transcriptionModel) {
+                            ForEach(viewModel.coderModels.filter(\.supportsTranscription)) { model in
+                                Text(model.displayName).tag(model.id)
+                            }
+                        }
+                    }
+
+                    Text("The token is stored locally in Keychain. Audio and note generation are sent only to this Coder service.")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    
-                    SecureField("OpenAI API Key", text: $viewModel.settings.openAIKey)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: .infinity)
                 }
                 
                 // Note Templates Section: only the Manage Templates button
@@ -113,7 +144,7 @@ struct SettingsView: View {
                     
                     // Link to GitHub repository
                     Link("GitHub",
-                         destination: URL(string: "https://github.com/owengretzinger/meetingnotes")!)
+                         destination: URL(string: "https://github.com/superdooper86/meetingnotes")!)
                         .foregroundColor(.blue)
 
                     // Link to landing page
@@ -171,6 +202,7 @@ struct SettingsView: View {
         .onAppear {
             viewModel.loadTemplates()
             viewModel.loadAPIKey()
+            Task { await viewModel.refreshModels() }
         }
         .onDisappear {
             DispatchQueue.main.async {
