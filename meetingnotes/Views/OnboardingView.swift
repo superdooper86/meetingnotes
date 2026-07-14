@@ -43,33 +43,60 @@ struct OnboardingView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         
-                        // API Key Section
+                        // Coder service
                         VStack(alignment: .leading, spacing: 8) {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("OpenAI API Key")
+                                Text("Coder Service")
                                     .font(.title2)
                                     .fontWeight(.semibold)
                                 
-                                Text("Uses gpt-4o-mini-transcribe and gpt-4.1. Typical cost is ~$0.20/hour. Your Mac communicates directly with OpenAI.")
+                                Text("Meeting audio is transcribed after recording, then summarized with the Coder models you select.")
                                     .font(.body)
-                                .foregroundColor(.secondary)
+                                    .foregroundColor(.secondary)
                             }
                             
-                            Button("Get API Key from OpenAI") {
-                                if let url = URL(string: "https://platform.openai.com/api-keys") {
-                                    NSWorkspace.shared.open(url)
-                                }
-                            }
-                            .buttonStyle(.link)
+                            TextField("http://coder-host:8787/v1", text: $settingsViewModel.settings.coderBaseURL)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.body)
                             
-                            SecureField("OpenAI API Key", text: $apiKey)
+                            SecureField("Coder service token", text: $apiKey)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.body)
                             
                             HStack {
+                                Button {
+                                    settingsViewModel.settings.coderAPIKey = apiKey
+                                    Task { await settingsViewModel.refreshModels() }
+                                } label: {
+                                    Label(settingsViewModel.isLoadingModels ? "Connecting" : "Connect", systemImage: "arrow.clockwise")
+                                }
+                                .disabled(settingsViewModel.isLoadingModels)
+
+                                if !settingsViewModel.connectionMessage.isEmpty {
+                                    Text(settingsViewModel.connectionMessage)
+                                        .font(.caption)
+                                        .foregroundColor(settingsViewModel.coderModels.isEmpty ? .red : .secondary)
+                                }
+                            }
+
+                            if !settingsViewModel.coderModels.isEmpty {
+                                Picker("Notes model", selection: $settingsViewModel.settings.notesModel) {
+                                    ForEach(settingsViewModel.coderModels.filter(\.supportsChat)) { model in
+                                        Text(model.displayName).tag(model.id)
+                                    }
+                                }
+
+                                Picker("Transcription model", selection: $settingsViewModel.settings.transcriptionModel) {
+                                    ForEach(settingsViewModel.coderModels.filter(\.supportsTranscription)) { model in
+                                        Text(model.displayName).tag(model.id)
+                                    }
+                                }
+                            }
+
+                            HStack {
                                 Image(systemName: "info.circle")
                                     .foregroundColor(.blue)
-                                Text("Stored locally and encrypted in Keychain.")
+                                Text("The token is stored locally in Keychain. The app does not connect directly to an AI provider.")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -130,7 +157,7 @@ struct OnboardingView: View {
                             Spacer()
                             Button("Get Started") {
                                 // Complete onboarding
-                                settingsViewModel.settings.openAIKey = apiKey
+                                settingsViewModel.settings.coderAPIKey = apiKey
                                 settingsViewModel.completeOnboarding()
                             }
                             .buttonStyle(.borderedProminent)
@@ -155,7 +182,7 @@ struct OnboardingView: View {
         .onAppear {
             checkPermissions()
             settingsViewModel.loadAPIKey()
-            apiKey = settingsViewModel.settings.openAIKey
+            apiKey = settingsViewModel.settings.coderAPIKey
             hasAcceptedTerms = settingsViewModel.settings.hasAcceptedTerms
         }
         .onChange(of: audioRecordingPermission.status) { oldValue, newValue in
@@ -172,6 +199,8 @@ struct OnboardingView: View {
         return micPermissionGranted && 
                systemAudioPermissionGranted && 
                !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+               !settingsViewModel.coderModels.filter(\.supportsChat).isEmpty &&
+               !settingsViewModel.coderModels.filter(\.supportsTranscription).isEmpty &&
                hasAcceptedTerms
     }
     

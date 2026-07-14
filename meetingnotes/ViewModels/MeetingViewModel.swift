@@ -28,19 +28,23 @@ class MeetingViewModel: ObservableObject {
     
     // Computed property to determine if Generate button should animate
     var shouldAnimateGenerateButton: Bool {
-        let generateButtonEnabled = !meeting.transcript.isEmpty && !isGeneratingNotes && !isRecording && !isStartingRecording
+        let generateButtonEnabled = !meeting.transcript.isEmpty && !isGeneratingNotes && !isRecording && !isProcessing && !isStartingRecording
         let noEnhancedNotesYet = meeting.generatedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return generateButtonEnabled && noEnhancedNotesYet
     }
     
-    // Computed property to determine if Transcribe button should animate
+    // Computed property to determine if the record button should animate
     var shouldAnimateTranscribeButton: Bool {
-        return !isRecording && meeting.transcriptChunks.isEmpty && !isStartingRecording
+        return !isRecording && !isProcessing && meeting.transcriptChunks.isEmpty && !isStartingRecording
     }
     
     // Computed property that always uses the direct RecordingSessionManager check
     var isRecording: Bool {
         return recordingSessionManager.isRecordingMeeting(meeting.id)
+    }
+
+    var isProcessing: Bool {
+        return recordingSessionManager.isProcessing && recordingSessionManager.activeMeetingId == meeting.id
     }
     @Published var selectedTab: MeetingViewTab = .transcript  // Default to transcript tab
 
@@ -110,6 +114,12 @@ class MeetingViewModel: ObservableObject {
             }
             .store(in: &cancellables)
         
+        recordingSessionManager.$isProcessing
+            .sink { [weak self] _ in
+                self?.recordingStateChanged.toggle()
+            }
+            .store(in: &cancellables)
+
         // Update error message when recording session manager encounters errors
         recordingSessionManager.$errorMessage
             .compactMap { $0 }
@@ -130,7 +140,7 @@ class MeetingViewModel: ObservableObject {
             self.meeting.transcriptChunks = recordingSessionManager.getTranscriptChunks(for: meeting.id)
         }
 
-        // Listen to real-time transcript updates for this meeting if it's being recorded
+        // Listen for final transcript updates for this meeting.
         recordingSessionManager.$activeRecordingTranscriptChunksUpdated
             .dropFirst()
             .sink { [weak self] updatedChunks in
@@ -158,18 +168,20 @@ class MeetingViewModel: ObservableObject {
 
     
     var recordingButtonText: String {
-        // Use the same computed isRecording property for perfect consistency
+        if isProcessing {
+            return "Processing"
+        }
         if isRecording {
             return "Stop"
         } else {
             // Check if there's existing transcript content
-            return meeting.transcriptChunks.isEmpty ? "Transcribe" : "Resume"
+            return meeting.transcriptChunks.isEmpty ? "Record" : "Resume"
         }
     }
     
     func toggleRecording() {
         // Prevent duplicate actions while validating API key or starting recording
-        if isValidatingKey || isStartingRecording { return }
+        if isValidatingKey || isStartingRecording || isProcessing { return }
         // Use the same computed isRecording property for perfect consistency
         if isRecording {
             stopRecording()
@@ -183,7 +195,7 @@ class MeetingViewModel: ObservableObject {
         isValidatingKey = true
         isStartingRecording = true
         Task {
-            let validationResult = await APIKeyValidator.shared.validateCurrentAPIKey()
+            let validationResult = await CoderAPIValidator.shared.validateCurrentAPIKey()
             defer { isValidatingKey = false }
 
             switch validationResult {
@@ -201,8 +213,16 @@ class MeetingViewModel: ObservableObject {
     }
     
     func stopRecording() {
-        recordingSessionManager.stopRecording()
-        saveMeeting()
+        isStartingRecording = true
+        Task {
+            let chunks = await recordingSessionManager.stopRecording()
+            meeting.transcriptChunks = chunks
+            saveMeeting()
+            if !meeting.formattedTranscript.isEmpty {
+                await generateNotes()
+            }
+            isStartingRecording = false
+        }
     }
     
     func loadTemplates() {
@@ -301,7 +321,7 @@ class MeetingViewModel: ObservableObject {
         // If this meeting is currently being recorded, stop the recording first
         if recordingSessionManager.isRecordingMeeting(meeting.id) {
             print("🛑 Stopping recording for meeting being deleted: \(meeting.id)")
-            recordingSessionManager.stopRecording()
+            recordingSessionManager.cancelRecording()
         }
         
         let success = LocalStorageManager.shared.deleteMeeting(meeting)
@@ -312,11 +332,11 @@ class MeetingViewModel: ObservableObject {
     }
     
     func deleteIfEmpty() {
-        if isEmpty && !isRecording {
+        if isEmpty && !isRecording && !isProcessing {
             print("🗑️ Auto-deleting empty meeting")
             deleteMeeting()
         } else {
             saveMeeting()
         }
     }
-} 
+}

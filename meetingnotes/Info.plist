@@ -2,12 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Meetingnotes needs access to capture system audio for transcription.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Meetingnotes needs access to your microphone for transcription.</string>
 	<key>SUFeedURL</key>
-	<string>https://raw.githubusercontent.com/owengretzinger/meetingnotes/main/appcast.xml</string>
+	<string>https://raw.githubusercontent.com/superdooper86/meetingnotes/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>BVXHOV8ZxPxKZ1swhFndymzew9nyd3si7849JA9cqsg=</string>
 	<key>SUEnableInstallerLauncherService</key>

@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		CC5718382E2020490042BA88 /* OpenAI in Frameworks */ = {isa = PBXBuildFile; productRef = CC5718372E2020490042BA88 /* OpenAI */; };
 		CCBA53E72E212F1C00469D84 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = CCBA53E62E212F1C00469D84 /* Sparkle */; };
 		CCC33F812E236B6F00EDE382 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = CCC33F802E236B6F00EDE382 /* PostHog */; };
 /* End PBXBuildFile section */
@@ -30,7 +29,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				CCC33F812E236B6F00EDE382 /* PostHog in Frameworks */,
-				CC5718382E2020490042BA88 /* OpenAI in Frameworks */,
 				CCBA53E72E212F1C00469D84 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -82,7 +80,6 @@
 			);
 			name = Meetingnotes;
 			packageProductDependencies = (
-				CC5718372E2020490042BA88 /* OpenAI */,
 				CCBA53E62E212F1C00469D84 /* Sparkle */,
 				CCC33F802E236B6F00EDE382 /* PostHog */,
 			);
@@ -115,7 +112,6 @@
 			mainGroup = CC57180F2E201D8D0042BA88;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				CC5718362E2020490042BA88 /* XCRemoteSwiftPackageReference "OpenAI" */,
 				CCBA53E52E212F1C00469D84 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				CCC33F7F2E236B6F00EDE382 /* XCRemoteSwiftPackageReference "posthog-ios" */,
 			);
@@ -365,14 +361,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		CC5718362E2020490042BA88 /* XCRemoteSwiftPackageReference "OpenAI" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/MacPaw/OpenAI";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.4.4;
-			};
-		};
 		CCBA53E52E212F1C00469D84 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle.git";
@@ -392,11 +380,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		CC5718372E2020490042BA88 /* OpenAI */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CC5718362E2020490042BA88 /* XCRemoteSwiftPackageReference "OpenAI" */;
-			productName = OpenAI;
-		};
 		CCBA53E62E212F1C00469D84 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = CCBA53E52E212F1C00469D84 /* XCRemoteSwiftPackageReference "Sparkle" */;

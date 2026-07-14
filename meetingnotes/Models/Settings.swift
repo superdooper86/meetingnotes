@@ -1,8 +1,7 @@
 import Foundation
 
 struct Settings: Codable {
-    // Only store API key in memory - will be loaded from keychain when needed
-    var openAIKey: String = ""
+    var coderAPIKey: String = ""
     
     // Computed properties that access UserDefaults
     var userBlurb: String {
@@ -30,6 +29,21 @@ struct Settings: Codable {
         set { UserDefaultsManager.shared.hasAcceptedTerms = newValue }
     }
     
+    var coderBaseURL: String {
+        get { UserDefaultsManager.shared.coderBaseURL }
+        set { UserDefaultsManager.shared.coderBaseURL = newValue }
+    }
+
+    var notesModel: String {
+        get { UserDefaultsManager.shared.notesModel }
+        set { UserDefaultsManager.shared.notesModel = newValue }
+    }
+
+    var transcriptionModel: String {
+        get { UserDefaultsManager.shared.transcriptionModel }
+        set { UserDefaultsManager.shared.transcriptionModel = newValue }
+    }
+
     // System prompt default loading
     static func defaultSystemPrompt() -> String {
         guard let path = Bundle.main.path(forResource: "DefaultSystemPrompt", ofType: "txt"),
@@ -57,12 +71,12 @@ struct Settings: Codable {
         return result
     }
     
-    init(openAIKey: String = "") {
-        self.openAIKey = openAIKey
+    init(coderAPIKey: String = "") {
+        self.coderAPIKey = coderAPIKey
     }
     
     // MARK: - Codable conformance for API key only
     private enum CodingKeys: String, CodingKey {
-        case openAIKey
+        case coderAPIKey
     }
-} 
+}

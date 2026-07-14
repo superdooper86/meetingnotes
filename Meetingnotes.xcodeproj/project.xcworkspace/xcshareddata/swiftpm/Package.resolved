@@ -2,15 +2,6 @@
   "originHash" : "121a6c330462966c69b74d5d4f619f194dc62623e87741aa10ee74337154e7b5",
   "pins" : [
     {
-      "identity" : "openai",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/MacPaw/OpenAI",
-      "state" : {
-        "revision" : "cedec2fc80aedafa332f7395b7004f79f547c794",
-        "version" : "0.4.4"
-      }
-    },
-    {
       "identity" : "posthog-ios",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/PostHog/posthog-ios.git",

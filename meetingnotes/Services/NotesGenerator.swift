@@ -1,8 +1,7 @@
 // NotesGenerator.swift
-// Handles AI-powered note generation using OpenAI
+// Handles AI-powered note generation through Coder
 
 import Foundation
-import OpenAI
 
 /// Result type for note generation streaming
 enum GenerationResult {
@@ -10,7 +9,7 @@ enum GenerationResult {
     case error(String)
 }
 
-/// Generates meeting notes using OpenAI API
+/// Generates meeting notes using the selected Coder model
 class NotesGenerator {
     static let shared = NotesGenerator()
     
@@ -31,14 +30,14 @@ class NotesGenerator {
         return AsyncStream<GenerationResult>(GenerationResult.self) { continuation in
             Task {
                 do {
-                    guard let apiKey = KeychainHelper.shared.getAPIKey(), !apiKey.isEmpty else {
+                    guard let apiKey = KeychainHelper.shared.getCoderAPIKey(), !apiKey.isEmpty else {
                         continuation.yield(.error(ErrorMessage.noAPIKey))
                         continuation.finish()
                         return
                     }
                     
                     // Validate API key before proceeding
-                    let validationResult = await APIKeyValidator.shared.validateAPIKey(apiKey)
+                    let validationResult = await CoderAPIValidator.shared.validateAPIKey(apiKey)
                     switch validationResult {
                     case .failure(let error):
                         continuation.yield(.error(error.localizedDescription))
@@ -47,8 +46,6 @@ class NotesGenerator {
                     case .success():
                         break
                     }
-                    
-                    let openAI = OpenAI(apiToken: apiKey)
                     
                     // Create date formatter for meeting date
                     let dateFormatter = DateFormatter()
@@ -90,18 +87,12 @@ class NotesGenerator {
                     
                     // Process the system prompt template
                     let systemContent = Settings.processTemplate(systemPrompt, with: templateVariables)
-                    let systemMessage = ChatQuery.ChatCompletionMessageParam(role: .system, content: systemContent)!
-
-                    print(systemContent)
-                
-                    let query = ChatQuery(messages: [systemMessage], model: .gpt4_1)
-                    
-                    let stream: AsyncThrowingStream<ChatStreamResult, Error> = openAI.chatsStream(query: query)
-                    
-                    for try await result in stream {
-                        if let content = result.choices.first?.delta.content {
-                            continuation.yield(.content(content))
-                        }
+                    let stream = CoderAPIClient.shared.streamChat(
+                        systemPrompt: systemContent,
+                        model: UserDefaultsManager.shared.notesModel
+                    )
+                    for try await content in stream {
+                        continuation.yield(.content(content))
                     }
                     
                     continuation.finish()
@@ -115,10 +106,10 @@ class NotesGenerator {
         }
     }
     
-    /// Validates if OpenAI API key is configured
+    /// Validates if the Coder service token is configured
     /// - Returns: True if API key exists, false otherwise
     func isConfigured() -> Bool {
-        guard let key = KeychainHelper.shared.getAPIKey(),
+        guard let key = KeychainHelper.shared.getCoderAPIKey(),
               !key.isEmpty else {
             return false
         }

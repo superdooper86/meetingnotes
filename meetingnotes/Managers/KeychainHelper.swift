@@ -14,15 +14,15 @@ class KeychainHelper {
     
     /// Gets the API key directly from keychain
     /// - Returns: The API key string if found, nil otherwise
-    func getAPIKey() -> String? {
-        return get(forKey: "openAIKey")
+    func getCoderAPIKey() -> String? {
+        return get(forKey: "coderAPIKey")
     }
     
     /// Saves the API key to keychain
     /// - Parameter apiKey: The API key to save
     /// - Returns: True if the save was successful, false otherwise
-    func saveAPIKey(_ apiKey: String) -> Bool {
-        return save(apiKey, forKey: "openAIKey")
+    func saveCoderAPIKey(_ apiKey: String) -> Bool {
+        return save(apiKey, forKey: "coderAPIKey")
     }
     
     /// Saves a string value to the keychain
@@ -80,4 +80,4 @@ class KeychainHelper {
         let status = SecItemDelete(query as CFDictionary)
         return status == errSecSuccess
     }
-} 
+}

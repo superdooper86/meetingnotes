@@ -1,5 +1,5 @@
 // ErrorHandler.swift
-// Centralized error handling service for OpenAI API and network errors
+// Centralized error handling service for Coder API and network errors
 
 import Foundation
 
@@ -9,7 +9,7 @@ class ErrorHandler {
     
     private init() {}
     
-    /// Handles errors from OpenAI API calls and network requests
+    /// Handles errors from Coder API calls and network requests
     /// - Parameter error: The error to handle
     /// - Returns: User-friendly error message
     func handleError(_ error: Error) -> String {
@@ -23,10 +23,10 @@ class ErrorHandler {
             return handleHTTPError(httpError)
         }
         
-        // Handle OpenAI API errors by checking error description
+        // Handle common API errors by checking the description.
         let errorDescription = error.localizedDescription.lowercased()
-        if let openAIError = categorizeOpenAIError(errorDescription) {
-            return openAIError
+        if let apiError = categorizeAPIError(errorDescription) {
+            return apiError
         }
         
         // Generic error fallback
@@ -125,9 +125,9 @@ class ErrorHandler {
         case .timedOut:
             return "Request timed out. Please try again."
         case .cannotFindHost:
-            return "Cannot reach OpenAI servers. Please check your internet connection."
+            return "Cannot reach the Coder service. Check its URL and network connection."
         case .cannotConnectToHost:
-            return "Cannot connect to OpenAI servers. Please check your internet connection."
+            return "Cannot connect to the Coder service. Check its URL and network connection."
         case .networkConnectionLost:
             return "Network connection lost. Please try again."
         case .httpTooManyRedirects:
@@ -145,7 +145,7 @@ class ErrorHandler {
         return handleHTTPStatusCode(httpError.statusCode, message: httpError.message)
     }
     
-    private func categorizeOpenAIError(_ errorDescription: String) -> String? {
+    private func categorizeAPIError(_ errorDescription: String) -> String? {
         if errorDescription.contains("unauthorized") || errorDescription.contains("401") {
             return ErrorMessage.invalidAPIKey
         } else if errorDescription.contains("insufficient") || errorDescription.contains("402") {
@@ -177,23 +177,23 @@ struct HTTPError: Error {
 
 /// Common error messages
 enum ErrorMessage {
-    static let noAPIKey = "OpenAI API key not found. Please configure your API key in Settings."
+    static let noAPIKey = "Coder service token not found. Configure the connection in Settings."
     static let noTemplate = "No template content found. Please select a valid template."
     static let noTranscript = "No transcript available. Please record some audio first."
-    static let connectionTimeout = "Failed to connect to OpenAI transcription service. Please check your internet connection and API key."
+    static let connectionTimeout = "Failed to connect to the Coder service. Check the URL, token, and network connection."
     static let configurationFailed = "Failed to configure transcription session."
     static let invalidURL = "Invalid API URL configuration."
-    static let noModelsAvailable = "No models available with your API key. Please check your account status."
+    static let noModelsAvailable = "Coder did not return any available models."
 
     // Centralized messages used across handlers
     static let success = "Success"
     static let badRequest = "Bad request. Please check your input."
-    static let invalidAPIKey = "Invalid OpenAI API key. Please check your API key in Settings."
-    static let insufficientFunds = "Insufficient funds in your OpenAI account. Please add credits to your account."
+    static let invalidAPIKey = "Invalid Coder service token. Check the token in Settings."
+    static let insufficientFunds = "The selected Coder provider has insufficient balance."
     static let accessForbidden = "Access forbidden. Please check your API key permissions."
     static let apiEndpointNotFound = "API endpoint not found. Please update the app."
-    static let rateLimited = "OpenAI API rate limit exceeded. Please try again later."
-    static let apiServerError = "OpenAI server error. Please try again later."
+    static let rateLimited = "The selected Coder provider is rate limited. Please try again later."
+    static let apiServerError = "Coder or its selected provider returned a server error."
     static let requestTimeout = "Request timeout. Please try again."
     static let requestTooLarge = "Request too large. Please try again."
     static let unsupportedData = "Unsupported data format. Please update the app."

@@ -18,6 +18,9 @@ class UserDefaultsManager {
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
         static let hasAcceptedTerms = "hasAcceptedTerms"
         static let selectedTemplateId = "selectedTemplateId"
+        static let coderBaseURL = "coderBaseURL"
+        static let notesModel = "notesModel"
+        static let transcriptionModel = "transcriptionModel"
     }
     
     // MARK: - User Blurb
@@ -60,5 +63,20 @@ class UserDefaultsManager {
                 userDefaults.removeObject(forKey: Keys.selectedTemplateId)
             }
         }
+    }
+
+    var coderBaseURL: String {
+        get { userDefaults.string(forKey: Keys.coderBaseURL) ?? "http://dev:8787/v1" }
+        set { userDefaults.set(newValue, forKey: Keys.coderBaseURL) }
+    }
+
+    var notesModel: String {
+        get { userDefaults.string(forKey: Keys.notesModel) ?? "gpt-5.4-mini" }
+        set { userDefaults.set(newValue, forKey: Keys.notesModel) }
+    }
+
+    var transcriptionModel: String {
+        get { userDefaults.string(forKey: Keys.transcriptionModel) ?? "groq/whisper-large-v3-turbo" }
+        set { userDefaults.set(newValue, forKey: Keys.transcriptionModel) }
     }
 }
