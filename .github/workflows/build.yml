@@ -17,5 +17,23 @@ jobs:
           -scheme meetingnotes
           -configuration Debug
           -destination 'platform=macOS'
+          -derivedDataPath "$RUNNER_TEMP/DerivedData"
           CODE_SIGNING_ALLOWED=NO
           build
+      - name: Smoke test local API
+        run: |
+          defaults write owen.meetingnotes muteDeckAPIEnabled -bool true
+          defaults write owen.meetingnotes muteDeckAPIPort -int 19880
+          "$RUNNER_TEMP/DerivedData/Build/Products/Debug/Meetingnotes.app/Contents/MacOS/Meetingnotes" >"$RUNNER_TEMP/meetingnotes.log" 2>&1 &
+          app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
+
+          for _ in {1..20}; do
+            if curl -fsS http://127.0.0.1:19880/api/info >"$RUNNER_TEMP/api-info.json"; then
+              break
+            fi
+            sleep 1
+          done
+
+          grep -q '"name":"MeetingDebrief"' "$RUNNER_TEMP/api-info.json"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:19880/api/recording/status)" = "401"
