@@ -44,6 +44,16 @@ struct Settings: Codable {
         set { UserDefaultsManager.shared.transcriptionModel = newValue }
     }
 
+    var muteDeckAPIEnabled: Bool {
+        get { UserDefaultsManager.shared.muteDeckAPIEnabled }
+        set { UserDefaultsManager.shared.muteDeckAPIEnabled = newValue }
+    }
+
+    var muteDeckAPIPort: Int {
+        get { UserDefaultsManager.shared.muteDeckAPIPort }
+        set { UserDefaultsManager.shared.muteDeckAPIPort = newValue }
+    }
+
     // System prompt default loading
     static func defaultSystemPrompt() -> String {
         guard let path = Bundle.main.path(forResource: "DefaultSystemPrompt", ofType: "txt"),

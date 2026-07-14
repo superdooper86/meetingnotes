@@ -21,6 +21,8 @@ class UserDefaultsManager {
         static let coderBaseURL = "coderBaseURL"
         static let notesModel = "notesModel"
         static let transcriptionModel = "transcriptionModel"
+        static let muteDeckAPIEnabled = "muteDeckAPIEnabled"
+        static let muteDeckAPIPort = "muteDeckAPIPort"
     }
     
     // MARK: - User Blurb
@@ -78,5 +80,18 @@ class UserDefaultsManager {
     var transcriptionModel: String {
         get { userDefaults.string(forKey: Keys.transcriptionModel) ?? "groq/whisper-large-v3-turbo" }
         set { userDefaults.set(newValue, forKey: Keys.transcriptionModel) }
+    }
+
+    var muteDeckAPIEnabled: Bool {
+        get { userDefaults.bool(forKey: Keys.muteDeckAPIEnabled) }
+        set { userDefaults.set(newValue, forKey: Keys.muteDeckAPIEnabled) }
+    }
+
+    var muteDeckAPIPort: Int {
+        get {
+            let stored = userDefaults.integer(forKey: Keys.muteDeckAPIPort)
+            return stored == 0 ? 9880 : stored
+        }
+        set { userDefaults.set(newValue, forKey: Keys.muteDeckAPIPort) }
     }
 }

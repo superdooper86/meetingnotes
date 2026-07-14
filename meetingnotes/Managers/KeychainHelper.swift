@@ -24,6 +24,32 @@ class KeychainHelper {
     func saveCoderAPIKey(_ apiKey: String) -> Bool {
         return save(apiKey, forKey: "coderAPIKey")
     }
+
+    func getOrCreateMuteDeckAPIToken() -> String {
+        if let token = get(forKey: "muteDeckAPIToken"), !token.isEmpty {
+            return token
+        }
+        return regenerateMuteDeckAPIToken()
+    }
+
+    func regenerateMuteDeckAPIToken() -> String {
+        var bytes = [UInt8](repeating: 0, count: 24)
+        let status = bytes.withUnsafeMutableBytes { buffer in
+            SecRandomCopyBytes(kSecRandomDefault, buffer.count, buffer.baseAddress!)
+        }
+        let randomPart: String
+        if status == errSecSuccess {
+            randomPart = Data(bytes).base64EncodedString()
+                .replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: "=", with: "")
+        } else {
+            randomPart = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        }
+        let token = "trby_\(randomPart)"
+        _ = save(token, forKey: "muteDeckAPIToken")
+        return token
+    }
     
     /// Saves a string value to the keychain
     /// - Parameters:
