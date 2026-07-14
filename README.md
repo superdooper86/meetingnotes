@@ -108,6 +108,7 @@ Implemented:
 - Meeting search functionality
 - Abilty to edit system prompt
 - Select any compatible Coder model for transcription and note generation
+- Automatic start and stop from MuteDeck through a compatible local API
 - Auto updates
 - Text formatting
 - Different note templates

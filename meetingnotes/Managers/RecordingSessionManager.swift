@@ -10,6 +10,7 @@ class RecordingSessionManager: ObservableObject {
     @Published var isRecording = false
     @Published var isProcessing = false
     @Published var activeMeetingId: UUID?
+    @Published var recordingStartedAt: Date?
     @Published var errorMessage: String?
     @Published var activeRecordingTranscriptChunksUpdated: [TranscriptChunk] = []
     
@@ -79,6 +80,7 @@ class RecordingSessionManager: ObservableObject {
         }
         
         activeMeetingId = meetingId
+        recordingStartedAt = Date()
         audioManager.startRecording()
     }
     
@@ -87,8 +89,10 @@ class RecordingSessionManager: ObservableObject {
         
         guard let meetingId = activeMeetingId else {
             audioManager.cancelRecording()
+            recordingStartedAt = nil
             return []
         }
+        recordingStartedAt = nil
         let chunks = await audioManager.stopRecordingAndTranscribe()
         activeRecordingTranscriptChunks = chunks
         activeRecordingTranscriptChunksUpdated = chunks
@@ -101,6 +105,7 @@ class RecordingSessionManager: ObservableObject {
     func cancelRecording() {
         audioManager.cancelRecording()
         activeMeetingId = nil
+        recordingStartedAt = nil
         activeRecordingTranscriptChunks = []
     }
     
@@ -144,4 +149,4 @@ class RecordingSessionManager: ObservableObject {
             return []
         }
     }
-} 
+}

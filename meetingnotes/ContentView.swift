@@ -19,6 +19,9 @@ struct ContentView: View {
                 MeetingListView(settingsViewModel: settingsViewModel)
             }
         }
+        .task {
+            LocalAPIServer.shared.applyConfiguration()
+        }
     }
 }
 

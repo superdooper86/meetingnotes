@@ -2,7 +2,9 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
+    @StateObject private var localAPIServer = LocalAPIServer.shared
     @State private var showingTemplateManager = false
+    @State private var confirmingTokenRegeneration = false
     @Binding var navigationPath: NavigationPath
     
     init(viewModel: SettingsViewModel, navigationPath: Binding<NavigationPath> = .constant(NavigationPath())) {
@@ -57,6 +59,65 @@ struct SettingsView: View {
                     Text("The token is stored locally in Keychain. Audio and note generation are sent only to this Coder service.")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Toggle("Enable MuteDeck Integration", isOn: $viewModel.settings.muteDeckAPIEnabled)
+                        .font(.headline)
+                        .onChange(of: viewModel.settings.muteDeckAPIEnabled) { _, _ in
+                            viewModel.applyMuteDeckAPIConfiguration()
+                        }
+
+                    if viewModel.settings.muteDeckAPIEnabled {
+                        LabeledContent("Host") {
+                            Text("127.0.0.1")
+                                .textSelection(.enabled)
+                        }
+
+                        LabeledContent("Port") {
+                            TextField("Port", value: $viewModel.settings.muteDeckAPIPort, format: .number)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 110)
+                                .onSubmit {
+                                    viewModel.applyMuteDeckAPIConfiguration()
+                                }
+                        }
+
+                        LabeledContent("API Token") {
+                            HStack(spacing: 8) {
+                                Text(viewModel.muteDeckAPIToken)
+                                    .font(.system(.body, design: .monospaced))
+                                    .lineLimit(1)
+                                    .textSelection(.enabled)
+
+                                Button {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(viewModel.muteDeckAPIToken, forType: .string)
+                                } label: {
+                                    Image(systemName: "doc.on.doc")
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Copy API token")
+
+                                Button {
+                                    confirmingTokenRegeneration = true
+                                } label: {
+                                    Image(systemName: "arrow.clockwise")
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Regenerate API token")
+                            }
+                        }
+
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(localAPIServer.isRunning ? Color.green : Color.orange)
+                                .frame(width: 8, height: 8)
+                            Text(localAPIServer.statusText)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
                 
                 // Note Templates Section: only the Manage Templates button
@@ -202,6 +263,7 @@ struct SettingsView: View {
         .onAppear {
             viewModel.loadTemplates()
             viewModel.loadAPIKey()
+            viewModel.applyMuteDeckAPIConfiguration()
             Task { await viewModel.refreshModels() }
         }
         .onDisappear {
@@ -214,6 +276,14 @@ struct SettingsView: View {
         } message: {
             Text(viewModel.saveMessage)
         }
+        .confirmationDialog("Regenerate API token?", isPresented: $confirmingTokenRegeneration, titleVisibility: .visible) {
+            Button("Regenerate", role: .destructive) {
+                viewModel.regenerateMuteDeckAPIToken()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("MuteDeck will need the new token before it can control recordings again.")
+        }
     }
 }
 
@@ -221,4 +291,4 @@ struct SettingsView: View {
     NavigationStack {
         SettingsView(viewModel: SettingsViewModel())
     }
-} 
+}

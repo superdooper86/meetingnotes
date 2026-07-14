@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import PostHog
 
+@MainActor
 class SettingsViewModel: ObservableObject {
     @Published var settings = Settings()
     @Published var saveMessage = ""
@@ -10,8 +11,10 @@ class SettingsViewModel: ObservableObject {
     @Published var coderModels: [CoderModel] = []
     @Published var isLoadingModels = false
     @Published var connectionMessage = ""
+    @Published var muteDeckAPIToken: String
     
     init() {
+        muteDeckAPIToken = KeychainHelper.shared.getOrCreateMuteDeckAPIToken()
         loadTemplates()
     }
     
@@ -84,6 +87,7 @@ class SettingsViewModel: ObservableObject {
         // Only save API key to keychain - other values are automatically saved to UserDefaults
         // via computed properties when they're modified
         let coderSaved = KeychainHelper.shared.saveCoderAPIKey(settings.coderAPIKey)
+        LocalAPIServer.shared.applyConfiguration()
 
         if showMessage {
             if coderSaved {
@@ -120,4 +124,12 @@ class SettingsViewModel: ObservableObject {
         // This will cause ContentView to re-evaluate and show onboarding
         NotificationCenter.default.post(name: Notification.Name("OnboardingReset"), object: nil)
     }
-} 
+
+    func applyMuteDeckAPIConfiguration() {
+        LocalAPIServer.shared.applyConfiguration()
+    }
+
+    func regenerateMuteDeckAPIToken() {
+        muteDeckAPIToken = KeychainHelper.shared.regenerateMuteDeckAPIToken()
+    }
+}
