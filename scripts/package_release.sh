@@ -92,14 +92,15 @@ SUBMISSION_ID=$(plutil -extract id raw -o - "$BUILD_ROOT/notary-submission.json"
 echo "Notarization submitted: $SUBMISSION_ID"
 
 NOTARY_STATUS="In Progress"
-for attempt in {1..180}; do
+NOTARY_MAX_ATTEMPTS=660
+for attempt in $(seq 1 "$NOTARY_MAX_ATTEMPTS"); do
   xcrun notarytool info "$SUBMISSION_ID" \
     --apple-id "$APPLE_ID" \
     --team-id "$APPLE_TEAM_ID" \
     --password "$APPLE_APP_PASSWORD" \
     --output-format json > "$BUILD_ROOT/notary-status.json"
   NOTARY_STATUS=$(plutil -extract status raw -o - "$BUILD_ROOT/notary-status.json")
-  echo "Notarization status ($attempt/180): $NOTARY_STATUS"
+  echo "Notarization status ($attempt/$NOTARY_MAX_ATTEMPTS): $NOTARY_STATUS"
 
   case "$NOTARY_STATUS" in
     Accepted)
@@ -123,7 +124,7 @@ for attempt in {1..180}; do
 done
 
 if [[ "$NOTARY_STATUS" != "Accepted" ]]; then
-  echo "Notarization did not finish within 90 minutes: $SUBMISSION_ID" >&2
+  echo "Notarization did not finish within 5.5 hours: $SUBMISSION_ID" >&2
   exit 1
 fi
 

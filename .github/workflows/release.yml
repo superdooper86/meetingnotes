@@ -57,7 +57,7 @@ jobs:
           echo "SIGNING_IDENTITY=$signing_identity" >> "$GITHUB_ENV"
 
       - name: Build, sign, notarize, and create appcast
-        timeout-minutes: 110
+        timeout-minutes: 350
         run: scripts/package_release.sh
 
       - name: Create GitHub release
