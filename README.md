@@ -6,8 +6,6 @@
 
   <p align="center">
     The Free, Open-Source AI Notetaker for Busy Engineers
-    <br />
-     <a href="https://github.com/owengretzinger/meetingnotes/releases/latest/download/Meetingnotes.dmg">Download for MacOS 14+</a>
   </p>
 </div>
 
