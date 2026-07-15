@@ -38,7 +38,7 @@ struct MeetingnotesApp: App {
             ContentView()
                 .frame(minWidth: 700, minHeight: 400)
         }
-        .windowResizability(.contentSize)
+        .windowResizability(.automatic)
         .defaultSize(width: 1000, height: 600)
         .commands {
             CommandGroup(after: .appInfo) {

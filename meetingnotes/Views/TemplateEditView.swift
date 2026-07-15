@@ -33,16 +33,9 @@ struct TemplateEditView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    TextEditor(text: $template.context)
-                        .scrollContentBackground(.hidden)
-                        .padding(8)
-                        .background(Color.gray.opacity(0.05))
-                        .cornerRadius(8)
-                        .frame(minHeight: 100)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
+                    TextField("Meeting Context", text: $template.context, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(4...10)
                 }
                 
                 // Sections
@@ -55,14 +48,12 @@ struct TemplateEditView: View {
                         Spacer()
                         
                         Button {
-                            withAnimation {
-                                template.sections.append(
-                                    TemplateSection(
-                                        title: "New Section",
-                                        description: "Description of this section"
-                                    )
+                            template.sections.append(
+                                TemplateSection(
+                                    title: "New Section",
+                                    description: "Description of this section"
                                 )
-                            }
+                            )
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "plus")
@@ -77,29 +68,20 @@ struct TemplateEditView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    ForEach(template.sections.indices, id: \.self) { index in
+                    ForEach($template.sections) { $section in
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    TextField("Section Title", text: $template.sections[index].title)
+                                    TextField("Section Title", text: $section.title)
                                         .textFieldStyle(.roundedBorder)
                                     
-                                    TextEditor(text: $template.sections[index].description)
-                                        .scrollContentBackground(.hidden)
-                                        .padding(8)
-                                        .background(Color.gray.opacity(0.05))
-                                        .cornerRadius(8)
-                                        .frame(minHeight: 60)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                                        )
+                                    TextField("Section Description", text: $section.description, axis: .vertical)
+                                        .textFieldStyle(.roundedBorder)
+                                        .lineLimit(3...8)
                                 }
                                 
                                 Button {
-                                    withAnimation {
-                                        let _ = template.sections.remove(at: index)
-                                    }
+                                    template.sections.removeAll { $0.id == section.id }
                                 } label: {
                                     Image(systemName: "trash")
                                         .foregroundColor(.red)
@@ -152,4 +134,4 @@ struct TemplateEditView: View {
             )
         ) { _ in }
     }
-} 
+}
