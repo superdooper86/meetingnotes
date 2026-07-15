@@ -77,14 +77,12 @@ jobs:
             echo "Tag already exists: $tag" >&2
             exit 1
           fi
-          git tag "$tag" "$GITHUB_SHA"
-          git push origin "$tag"
           gh release create "$tag" \
             "$RUNNER_TEMP/meetingnotes-release/release/Meetingnotes-$VERSION.zip" \
             "$RUNNER_TEMP/meetingnotes-release/release/appcast.xml" \
+            --target "$GITHUB_SHA" \
             --title "Meetingnotes $VERSION" \
-            --generate-notes \
-            --verify-tag
+            --generate-notes
 
       - name: Remove signing keychain
         if: always()
