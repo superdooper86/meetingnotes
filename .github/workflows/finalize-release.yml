@@ -33,7 +33,6 @@ jobs:
       APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
       SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
       GH_TOKEN: ${{ github.token }}
-      PENDING_DIR: ${{ runner.temp }}/meetingnotes-pending
     steps:
       - uses: actions/checkout@v7
 
@@ -52,6 +51,7 @@ jobs:
           MANUAL_RUN_ID: ${{ inputs.release_run_id }}
           COMPLETED_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
+          PENDING_DIR="$RUNNER_TEMP/meetingnotes-pending"
           candidate_ids=()
           if [[ -n "${MANUAL_RUN_ID:-}" ]]; then
             candidate_ids+=("$MANUAL_RUN_ID")
