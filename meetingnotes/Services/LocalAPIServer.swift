@@ -244,7 +244,7 @@ private final class LocalRecordingController {
             return statusPayload()
         }
 
-        let meeting = Meeting()
+        let meeting = Meeting(templateId: LocalStorageManager.shared.preferredTemplateID())
         guard LocalStorageManager.shared.saveMeeting(meeting) else {
             throw LocalRecordingError.saveFailed
         }
@@ -288,9 +288,7 @@ private final class LocalRecordingController {
         meeting.transcriptChunks = chunks
         let templates = LocalStorageManager.shared.loadTemplates()
         if meeting.templateId == nil {
-            meeting.templateId = UserDefaultsManager.shared.selectedTemplateId
-                ?? templates.first(where: { $0.title == "Standard Meeting" })?.id
-                ?? templates.first?.id
+            meeting.templateId = LocalStorageManager.shared.preferredTemplateID(in: templates)
         }
         _ = LocalStorageManager.shared.saveMeeting(meeting)
         NotificationCenter.default.post(name: .meetingSaved, object: meeting)

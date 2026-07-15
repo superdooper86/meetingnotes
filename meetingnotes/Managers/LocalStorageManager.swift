@@ -269,6 +269,19 @@ class LocalStorageManager {
         
         return templates.sorted { $0.title < $1.title }
     }
+
+    func preferredTemplateID(in templates: [NoteTemplate]? = nil) -> UUID? {
+        let availableTemplates = templates ?? loadTemplates()
+        if let selectedTemplateID = UserDefaultsManager.shared.selectedTemplateId,
+           availableTemplates.contains(where: { $0.id == selectedTemplateID }) {
+            return selectedTemplateID
+        }
+
+        let fallbackTemplateID = availableTemplates.first(where: { $0.title == "Standard Meeting" })?.id
+            ?? availableTemplates.first?.id
+        UserDefaultsManager.shared.selectedTemplateId = fallbackTemplateID
+        return fallbackTemplateID
+    }
     
     /// Deletes a template from local storage
     /// - Parameter template: The template to delete

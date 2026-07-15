@@ -16,7 +16,7 @@ struct TemplateListView: View {
                                 Text(template.title)
                                     .font(.headline)
                                 if template.isDefault {
-                                    Text("Default")
+                                    Text("Built-in")
                                         .font(.caption)
                                         .padding(.horizontal, 6)
                                         .padding(.vertical, 2)
@@ -38,6 +38,15 @@ struct TemplateListView: View {
                     }
                     
                     Spacer()
+
+                    Button {
+                        viewModel.setDefaultTemplate(template)
+                    } label: {
+                        Image(systemName: viewModel.defaultTemplateID == template.id ? "star.fill" : "star")
+                            .foregroundColor(viewModel.defaultTemplateID == template.id ? .accentColor : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(viewModel.defaultTemplateID == template.id ? "Default template" : "Use as default template")
                     
                     if !template.isDefault {
                         Button(role: .destructive) {
@@ -50,6 +59,14 @@ struct TemplateListView: View {
                     }
                 }
                 .contextMenu {
+                    if viewModel.defaultTemplateID != template.id {
+                        Button {
+                            viewModel.setDefaultTemplate(template)
+                        } label: {
+                            Label("Use as Default", systemImage: "star")
+                        }
+                    }
+
                     if !template.isDefault {
                         Button(role: .destructive) {
                             viewModel.deleteTemplate(template)
@@ -94,4 +111,4 @@ struct TemplateListView: View {
 
 #Preview {
     TemplateListView()
-} 
+}

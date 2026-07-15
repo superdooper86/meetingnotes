@@ -52,24 +52,7 @@ class SettingsViewModel: ObservableObject {
     
     func loadTemplates() {
         templates = LocalStorageManager.shared.loadTemplates()
-        
-        // Validate that the selected template still exists
-        if let selectedId = settings.selectedTemplateId {
-            if !templates.contains(where: { $0.id == selectedId }) {
-                // Selected template was deleted, clear the selection
-                settings.selectedTemplateId = nil
-            }
-        }
-        
-        // If no template is selected, select the first default template
-        if settings.selectedTemplateId == nil {
-            if let defaultTemplate = templates.first(where: { $0.title == "Standard Meeting" }) {
-                settings.selectedTemplateId = defaultTemplate.id
-            } else if let firstTemplate = templates.first {
-                // Fallback to first available template
-                settings.selectedTemplateId = firstTemplate.id
-            }
-        }
+        settings.selectedTemplateId = LocalStorageManager.shared.preferredTemplateID(in: templates)
     }
     
     func saveSettings(showMessage: Bool = true) {

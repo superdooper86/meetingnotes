@@ -68,11 +68,11 @@ class MeetingListViewModel: ObservableObject {
     }
     
     func createNewMeeting() -> Meeting {
-        let newMeeting = Meeting()
+        let newMeeting = Meeting(templateId: LocalStorageManager.shared.preferredTemplateID())
         meetings.insert(newMeeting, at: 0)
         _ = LocalStorageManager.shared.saveMeeting(newMeeting)
         // Track meeting creation event
         PostHogSDK.shared.capture("meeting_created")
         return newMeeting
     }
-} 
+}

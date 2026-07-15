@@ -144,6 +144,12 @@ struct SettingsView: View {
                     Text("Create and manage note templates")
                         .font(.caption)
                         .foregroundColor(.secondary)
+
+                    Picker("Default template", selection: $viewModel.settings.selectedTemplateId) {
+                        ForEach(viewModel.templates) { template in
+                            Text(template.title).tag(Optional(template.id))
+                        }
+                    }
                     
                     Button {
                         navigationPath.append("templates")

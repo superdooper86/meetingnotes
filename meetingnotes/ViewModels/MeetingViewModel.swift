@@ -228,11 +228,13 @@ class MeetingViewModel: ObservableObject {
     func loadTemplates() {
         templates = LocalStorageManager.shared.loadTemplates()
 
-        // Load per-meeting template or default to Standard Meeting
-        if let meetingTemplateId = meeting.templateId {
+        // Keep an existing meeting's template, otherwise use the configured default.
+        if let meetingTemplateId = meeting.templateId,
+           templates.contains(where: { $0.id == meetingTemplateId }) {
             selectedTemplateId = meetingTemplateId
-        } else if let defaultTemplate = templates.first(where: { $0.title == "Standard Meeting" }) {
-            selectedTemplateId = defaultTemplate.id
+        } else {
+            selectedTemplateId = LocalStorageManager.shared.preferredTemplateID(in: templates)
+            meeting.templateId = selectedTemplateId
         }
     }
     

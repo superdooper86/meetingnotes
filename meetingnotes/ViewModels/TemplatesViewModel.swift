@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 class TemplatesViewModel: ObservableObject {
     @Published var templates: [NoteTemplate] = []
+    @Published private(set) var defaultTemplateID: UUID? = nil
     @Published var isLoading = false
     @Published var errorMessage: String?
     
@@ -14,7 +15,13 @@ class TemplatesViewModel: ObservableObject {
     func loadTemplates() {
         isLoading = true
         templates = LocalStorageManager.shared.loadTemplates()
+        defaultTemplateID = LocalStorageManager.shared.preferredTemplateID(in: templates)
         isLoading = false
+    }
+
+    func setDefaultTemplate(_ template: NoteTemplate) {
+        UserDefaultsManager.shared.selectedTemplateId = template.id
+        defaultTemplateID = template.id
     }
     
     func saveTemplate(_ template: NoteTemplate) {
@@ -42,4 +49,4 @@ class TemplatesViewModel: ObservableObject {
             ]
         )
     }
-} 
+}
