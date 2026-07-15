@@ -21,9 +21,12 @@ final class AudioManager: NSObject, ObservableObject {
     private let audioProcessController = AudioProcessController()
     private let permission = AudioRecordingPermission()
     private let tapQueue = DispatchQueue(label: "io.meetingnotes.audiotap", qos: .userInitiated)
+    private let audioFileLock = NSLock()
     private var isTapActive = false
     private var isRestartingSystemTap = false
+    private var isAcceptingAudio = false
     private var micRetryCount = 0
+    private var pendingMicRestart: DispatchWorkItem?
     private let maxMicRetries = 3
     private var cancellables = Set<AnyCancellable>()
     
@@ -122,20 +125,26 @@ final class AudioManager: NSObject, ObservableObject {
         let id = sessionID.uuidString
         let micURL = base.appendingPathComponent("meetingnotes-\(id)-mic.m4a")
         let systemURL = base.appendingPathComponent("meetingnotes-\(id)-system.m4a")
-        micAudioFile = try AVAudioFile(
+        let newMicAudioFile = try AVAudioFile(
             forWriting: micURL,
             settings: settings,
             commonFormat: .pcmFormatFloat32,
             interleaved: false
         )
-        systemAudioFile = try AVAudioFile(
+        let newSystemAudioFile = try AVAudioFile(
             forWriting: systemURL,
             settings: settings,
             commonFormat: .pcmFormatFloat32,
             interleaved: false
         )
+
+        audioFileLock.lock()
+        micAudioFile = newMicAudioFile
+        systemAudioFile = newSystemAudioFile
         micAudioURL = micURL
         systemAudioURL = systemURL
+        isAcceptingAudio = true
+        audioFileLock.unlock()
     }
 
     private func startMicrophoneTap() {
@@ -161,12 +170,17 @@ final class AudioManager: NSObject, ObservableObject {
     }
     
     private func restartMicrophone() {
-        guard (isRecording || micAudioFile != nil), micRetryCount < maxMicRetries else { return }
+        guard hasActiveAudioFiles(), micRetryCount < maxMicRetries else { return }
         micRetryCount += 1
+        pendingMicRestart?.cancel()
         cleanupAudioEngine()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-            self?.startMicrophoneTap()
+
+        let restart = DispatchWorkItem { [weak self] in
+            guard let self, self.hasActiveAudioFiles() else { return }
+            self.startMicrophoneTap()
         }
+        pendingMicRestart = restart
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: restart)
     }
         
     private func cleanupAudioEngine() {
@@ -294,6 +308,12 @@ final class AudioManager: NSObject, ObservableObject {
             return inputBuffer
         }
         guard status != .error, conversionError == nil, outputBuffer.frameLength > 0 else { return }
+
+        audioFileLock.lock()
+        defer { audioFileLock.unlock() }
+        guard isAcceptingAudio else {
+            return
+        }
         do {
             switch source {
             case .mic:
@@ -327,7 +347,16 @@ final class AudioManager: NSObject, ObservableObject {
     
     private func stopCaptureAndCloseFiles() -> [URL?] {
         isRecording = false
+        pendingMicRestart?.cancel()
+        pendingMicRestart = nil
         AudioLevelManager.shared.updateRecordingState(false)
+
+        // Stop new writes and wait for any callback already writing before
+        // AVAudioFile is finalized and released.
+        audioFileLock.lock()
+        isAcceptingAudio = false
+        audioFileLock.unlock()
+
         if isTapActive {
             processTap?.invalidate()
             processTap = nil
@@ -337,11 +366,13 @@ final class AudioManager: NSObject, ObservableObject {
         micRetryCount = 0
         resetAudioLevels()
 
+        audioFileLock.lock()
         let micHasAudio = (micAudioFile?.length ?? 0) > 0
         let systemHasAudio = (systemAudioFile?.length ?? 0) > 0
         micAudioFile = nil
         systemAudioFile = nil
         let files: [URL?] = [micHasAudio ? micAudioURL : nil, systemHasAudio ? systemAudioURL : nil]
+        audioFileLock.unlock()
         if !micHasAudio, let micAudioURL { try? FileManager.default.removeItem(at: micAudioURL) }
         if !systemHasAudio, let systemAudioURL { try? FileManager.default.removeItem(at: systemAudioURL) }
         micAudioURL = nil
@@ -364,6 +395,12 @@ final class AudioManager: NSObject, ObservableObject {
         systemAudioLevel = 0
         AudioLevelManager.shared.updateMicLevel(0)
         AudioLevelManager.shared.updateSystemLevel(0)
+    }
+
+    private func hasActiveAudioFiles() -> Bool {
+        audioFileLock.lock()
+        defer { audioFileLock.unlock() }
+        return isAcceptingAudio
     }
     
     private func handleAudioEngineConfigurationChange() {
