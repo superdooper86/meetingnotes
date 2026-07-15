@@ -197,6 +197,11 @@ struct CollapsedTranscriptChunkView: View {
     
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(TranscriptTimestampFormatter.string(from: chunk.timestamp))
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+                .frame(width: 58, alignment: .leading)
+
             // Source indicator
             HStack(spacing: 4) {
                 Image(systemName: chunk.source.icon)

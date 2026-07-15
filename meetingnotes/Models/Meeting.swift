@@ -1,5 +1,17 @@
 import Foundation
 
+enum TranscriptTimestampFormatter {
+    static let formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    static func string(from date: Date) -> String {
+        formatter.string(from: date)
+    }
+}
+
 enum AudioSource: String, Codable, CaseIterable {
     case mic = "MIC"
     case system = "SYS"
@@ -107,81 +119,22 @@ struct Meeting: Codable, Identifiable, Hashable {
     // Formatted transcript for copying with collapsed sequential chunks
     var formattedTranscript: String {
         let finalChunks = transcriptChunks.filter { $0.isFinal }
-        
-        guard !finalChunks.isEmpty else { return "" }
-        
-        var result: [String] = []
-        var currentSource: AudioSource?
-        var currentTexts: [String] = []
-        
-        for chunk in finalChunks {
-            if chunk.source != currentSource {
-                // Finish previous section if exists
-                if let source = currentSource, !currentTexts.isEmpty {
-                    let combinedText = currentTexts.joined(separator: " ")
-                    result.append("\(source.copyPrefix): \(combinedText)")
-                }
-                
-                // Start new section
-                currentSource = chunk.source
-                currentTexts = [chunk.text]
-            } else {
-                // Same source, add to current section
-                currentTexts.append(chunk.text)
-            }
-        }
-        
-        // Finish last section
-        if let source = currentSource, !currentTexts.isEmpty {
-            let combinedText = currentTexts.joined(separator: " ")
-            result.append("\(source.copyPrefix): \(combinedText)")
-        }
-        
-        return result.joined(separator: "  \n")
+
+        return finalChunks.map { chunk in
+            "[\(TranscriptTimestampFormatter.string(from: chunk.timestamp))] \(chunk.source.copyPrefix): \(chunk.text)"
+        }.joined(separator: "\n")
     }
     
     // Collapsed chunks for UI display
     var collapsedTranscriptChunks: [CollapsedTranscriptChunk] {
-        guard !transcriptChunks.isEmpty else { return [] }
-        
-        var result: [CollapsedTranscriptChunk] = []
-        var currentSource: AudioSource?
-        var currentTexts: [String] = []
-        var currentTimestamp: Date?
-        
-        for chunk in transcriptChunks {
-            if chunk.source != currentSource {
-                // Finish previous section if exists
-                if let source = currentSource, !currentTexts.isEmpty, let timestamp = currentTimestamp {
-                    let combinedText = currentTexts.joined(separator: " ")
-                    result.append(CollapsedTranscriptChunk(
-                        timestamp: timestamp,
-                        source: source,
-                        combinedText: combinedText
-                    ))
-                }
-                
-                // Start new section
-                currentSource = chunk.source
-                currentTexts = [chunk.text]
-                currentTimestamp = chunk.timestamp
-            } else {
-                // Same source, add to current section
-                currentTexts.append(chunk.text)
-            }
+        transcriptChunks.filter(\.isFinal).map { chunk in
+            CollapsedTranscriptChunk(
+                id: chunk.id,
+                timestamp: chunk.timestamp,
+                source: chunk.source,
+                combinedText: chunk.text
+            )
         }
-        
-        // Finish last section
-        if let source = currentSource, !currentTexts.isEmpty, let timestamp = currentTimestamp {
-            let combinedText = currentTexts.joined(separator: " ")
-            result.append(CollapsedTranscriptChunk(
-                timestamp: timestamp,
-                source: source,
-                combinedText: combinedText
-            ))
-        }
-        
-        return result
     }
     
     // Separate computed properties for mic and system transcripts
@@ -198,4 +151,4 @@ struct Meeting: Codable, Identifiable, Hashable {
             .map { $0.text }
             .joined(separator: " ")
     }
-} 
+}
