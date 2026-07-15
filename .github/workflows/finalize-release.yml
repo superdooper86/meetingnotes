@@ -1,19 +1,12 @@
-name: Finalize Release
+name: Finalize Notarization (manual)
 
 on:
-  workflow_run:
-    workflows:
-      - Release
-    types:
-      - completed
   workflow_dispatch:
     inputs:
       release_run_id:
         description: Release workflow run ID; leave blank to use the latest pending run
         required: false
         type: string
-  schedule:
-    - cron: "17,47 * * * *"
 
 permissions:
   actions: read

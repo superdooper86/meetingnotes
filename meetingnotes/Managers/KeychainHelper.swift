@@ -8,7 +8,7 @@ import Security
 class KeychainHelper {
     static let shared = KeychainHelper()
     
-    private let serviceName = "owen.meetingnotes"
+    private let serviceName = "net.jamesbone.meetingnotes"
     
     private init() {}
     

@@ -7,7 +7,7 @@ set -e  # Exit on any error
 
 # Configuration
 APP_NAME="Meetingnotes"
-BUNDLE_ID="owen.meetingnotes"
+BUNDLE_ID="net.jamesbone.meetingnotes"
 VERSION=$(grep -m1 "MARKETING_VERSION" Meetingnotes.xcodeproj/project.pbxproj | sed 's/.*= \(.*\);/\1/')
 
 # Source environment variables if .env file exists
@@ -379,4 +379,4 @@ echo "   1. Test the DMG on another Mac"
 echo "   2. Create a GitHub release with tag v${VERSION}"
 echo "   3. Upload the DMG to the GitHub release"
 echo "   4. Commit and push the appcast.xml file"
-echo "   5. Your users will get auto-update notifications!" 
+echo "   5. Your users will get auto-update notifications!"
