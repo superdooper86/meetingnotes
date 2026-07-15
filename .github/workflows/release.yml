@@ -67,7 +67,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Create GitHub release
+      - name: Legacy inline publisher (disabled)
         if: ${{ false }}
         env:
           GH_TOKEN: ${{ github.token }}
