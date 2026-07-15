@@ -35,8 +35,8 @@ jobs:
             | grep -q 'com.apple.security.network.server'
       - name: Smoke test local API
         run: |
-          defaults write owen.meetingnotes muteDeckAPIEnabled -bool true
-          defaults write owen.meetingnotes muteDeckAPIPort -int 19880
+          defaults write net.jamesbone.meetingnotes muteDeckAPIEnabled -bool true
+          defaults write net.jamesbone.meetingnotes muteDeckAPIPort -int 19880
           "$RUNNER_TEMP/DerivedData/Build/Products/Release/Meetingnotes.app/Contents/MacOS/Meetingnotes" >"$RUNNER_TEMP/meetingnotes.log" 2>&1 &
           app_pid=$!
           trap 'kill "$app_pid" 2>/dev/null || true' EXIT
