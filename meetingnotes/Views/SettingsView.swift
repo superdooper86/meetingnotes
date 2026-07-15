@@ -1,10 +1,14 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @StateObject private var localAPIServer = LocalAPIServer.shared
     @State private var showingTemplateManager = false
     @State private var confirmingTokenRegeneration = false
+    @State private var showingMeetingImporter = false
+    @State private var meetingImportMessage = ""
+    @State private var showingMeetingImportResult = false
     @Binding var navigationPath: NavigationPath
     
     init(viewModel: SettingsViewModel, navigationPath: Binding<NavigationPath> = .constant(NavigationPath())) {
@@ -117,6 +121,17 @@ struct SettingsView: View {
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Meeting Storage")
+                        .font(.headline)
+
+                    Button {
+                        showingMeetingImporter = true
+                    } label: {
+                        Label("Import Meetings...", systemImage: "square.and.arrow.down")
                     }
                 }
                 
@@ -275,6 +290,29 @@ struct SettingsView: View {
             Button("OK") { }
         } message: {
             Text(viewModel.saveMessage)
+        }
+        .fileImporter(
+            isPresented: $showingMeetingImporter,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            do {
+                guard let directory = try result.get().first else { return }
+                let importResult = try LocalStorageManager.shared.importMeetings(from: directory)
+                meetingImportMessage = "Imported \(importResult.importedCount) meeting\(importResult.importedCount == 1 ? "" : "s")."
+                if importResult.skippedCount > 0 {
+                    meetingImportMessage += " Skipped \(importResult.skippedCount) existing or invalid file\(importResult.skippedCount == 1 ? "" : "s")."
+                }
+                NotificationCenter.default.post(name: .meetingSaved, object: nil)
+            } catch {
+                meetingImportMessage = "Meeting import failed: \(error.localizedDescription)"
+            }
+            showingMeetingImportResult = true
+        }
+        .alert("Meeting Import", isPresented: $showingMeetingImportResult) {
+            Button("OK") { }
+        } message: {
+            Text(meetingImportMessage)
         }
         .confirmationDialog("Regenerate API token?", isPresented: $confirmingTokenRegeneration, titleVisibility: .visible) {
             Button("Regenerate", role: .destructive) {

@@ -12,9 +12,13 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Meetingnotes needs access to your microphone for transcription.</string>
 	<key>SUFeedURL</key>
-	<string>https://raw.githubusercontent.com/superdooper86/meetingnotes/main/appcast.xml</string>
+	<string>https://github.com/superdooper86/meetingnotes/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>BVXHOV8ZxPxKZ1swhFndymzew9nyd3si7849JA9cqsg=</string>
+	<string>9ZuN9G9ERB3Qoyyd/4FsF+6LMUv5jzAGP26OXAHBiW0=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
 	<key>SUEnableInstallerLauncherService</key>
 	<true/>
 </dict>
