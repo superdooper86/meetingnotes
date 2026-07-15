@@ -9,7 +9,7 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: meetingnotes-release
@@ -23,7 +23,6 @@ jobs:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,7 +33,7 @@ jobs:
           APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
-          for variable in APPLE_CERTIFICATE_P12 APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_TEAM_ID APPLE_APP_PASSWORD SPARKLE_PRIVATE_KEY; do
+          for variable in APPLE_CERTIFICATE_P12 APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_TEAM_ID APPLE_APP_PASSWORD; do
             if [[ -z "${!variable:-}" ]]; then
               echo "Missing GitHub Actions secret: $variable" >&2
               exit 1
@@ -56,11 +55,20 @@ jobs:
           fi
           echo "SIGNING_IDENTITY=$signing_identity" >> "$GITHUB_ENV"
 
-      - name: Build, sign, notarize, and create appcast
-        timeout-minutes: 350
+      - name: Build, sign, and submit for notarization
+        timeout-minutes: 30
         run: scripts/package_release.sh
 
+      - name: Preserve signed build while Apple processes it
+        uses: actions/upload-artifact@v4
+        with:
+          name: meetingnotes-notarization-${{ github.run_id }}
+          path: ${{ runner.temp }}/meetingnotes-release/pending
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Create GitHub release
+        if: ${{ false }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

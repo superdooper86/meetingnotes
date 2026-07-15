@@ -1,0 +1,99 @@
+name: Finalize Release
+
+on:
+  workflow_run:
+    workflows:
+      - Release
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      release_run_id:
+        description: Release workflow run ID; leave blank to use the latest pending run
+        required: false
+        type: string
+  schedule:
+    - cron: "17,47 * * * *"
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: meetingnotes-finalize-release
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: macos-15
+    env:
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      PENDING_DIR: ${{ runner.temp }}/meetingnotes-pending
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate release secrets
+        run: |
+          for variable in APPLE_ID APPLE_TEAM_ID APPLE_APP_PASSWORD SPARKLE_PRIVATE_KEY; do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "Missing GitHub Actions secret: $variable" >&2
+              exit 1
+            fi
+          done
+
+      - name: Download pending signed build
+        id: submission
+        env:
+          MANUAL_RUN_ID: ${{ inputs.release_run_id }}
+          COMPLETED_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          candidate_ids=()
+          if [[ -n "${MANUAL_RUN_ID:-}" ]]; then
+            candidate_ids+=("$MANUAL_RUN_ID")
+          elif [[ -n "${COMPLETED_RUN_ID:-}" ]]; then
+            candidate_ids+=("$COMPLETED_RUN_ID")
+          else
+            while IFS= read -r run_id; do
+              candidate_ids+=("$run_id")
+            done < <(gh run list --repo "$GITHUB_REPOSITORY" --workflow Release --status success --limit 20 --json databaseId --jq '.[].databaseId')
+          fi
+
+          for run_id in "${candidate_ids[@]}"; do
+            if [[ ! "$run_id" =~ ^[0-9]+$ ]]; then
+              echo "Invalid release run ID: $run_id" >&2
+              exit 1
+            fi
+
+            artifact_name="meetingnotes-notarization-$run_id"
+            artifact_count=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" \
+              --jq "[.artifacts[] | select(.name == \"$artifact_name\" and .expired == false)] | length")
+            if [[ "$artifact_count" == 0 ]]; then
+              continue
+            fi
+
+            rm -rf "$PENDING_DIR"
+            mkdir -p "$PENDING_DIR"
+            gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name "$artifact_name" --dir "$PENDING_DIR"
+
+            version=$(<"$PENDING_DIR/version")
+            if gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              continue
+            fi
+
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+            echo "Using release submission from workflow run $run_id"
+            exit 0
+          done
+
+          echo "found=false" >> "$GITHUB_OUTPUT"
+          echo "No pending release submission was found"
+
+      - name: Check notarization and publish when accepted
+        if: steps.submission.outputs.found == 'true'
+        run: scripts/finalize_release.sh

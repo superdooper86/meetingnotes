@@ -8,7 +8,7 @@ SCHEME="meetingnotes"
 RUNNER_TEMP="${RUNNER_TEMP:-/tmp}"
 BUILD_ROOT="${BUILD_ROOT:-$RUNNER_TEMP/meetingnotes-release}"
 DERIVED_DATA="$BUILD_ROOT/DerivedData"
-RELEASE_DIR="$BUILD_ROOT/release"
+PENDING_DIR="$BUILD_ROOT/pending"
 APP_PATH="$DERIVED_DATA/Build/Products/Release/$APP_NAME.app"
 
 required_variables=(
@@ -17,8 +17,7 @@ required_variables=(
   APPLE_ID
   APPLE_TEAM_ID
   APPLE_APP_PASSWORD
-  SPARKLE_PRIVATE_KEY
-  GITHUB_REPOSITORY
+  GITHUB_SHA
 )
 
 for variable in "${required_variables[@]}"; do
@@ -35,7 +34,7 @@ if [[ "$project_version" != "$VERSION" ]]; then
 fi
 
 rm -rf "$BUILD_ROOT"
-mkdir -p "$RELEASE_DIR"
+mkdir -p "$PENDING_DIR"
 
 xcodebuild \
   -project "$PROJECT" \
@@ -79,77 +78,31 @@ codesign --force --timestamp --options runtime \
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 codesign -d --entitlements :- "$APP_PATH" 2>&1 | grep -q 'com.apple.security.app-sandbox'
 
-PRE_NOTARY_ZIP="$BUILD_ROOT/$APP_NAME-pre-notary.zip"
+PRE_NOTARY_ZIP="$PENDING_DIR/$APP_NAME-pre-notary.zip"
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$PRE_NOTARY_ZIP"
 
 xcrun notarytool submit "$PRE_NOTARY_ZIP" \
   --apple-id "$APPLE_ID" \
   --team-id "$APPLE_TEAM_ID" \
   --password "$APPLE_APP_PASSWORD" \
-  --output-format json > "$BUILD_ROOT/notary-submission.json"
+  --output-format json > "$PENDING_DIR/notary-submission.json"
 
-SUBMISSION_ID=$(plutil -extract id raw -o - "$BUILD_ROOT/notary-submission.json")
+SUBMISSION_ID=$(plutil -extract id raw -o - "$PENDING_DIR/notary-submission.json")
 echo "Notarization submitted: $SUBMISSION_ID"
-
-NOTARY_STATUS="In Progress"
-NOTARY_MAX_ATTEMPTS=660
-for attempt in $(seq 1 "$NOTARY_MAX_ATTEMPTS"); do
-  xcrun notarytool info "$SUBMISSION_ID" \
-    --apple-id "$APPLE_ID" \
-    --team-id "$APPLE_TEAM_ID" \
-    --password "$APPLE_APP_PASSWORD" \
-    --output-format json > "$BUILD_ROOT/notary-status.json"
-  NOTARY_STATUS=$(plutil -extract status raw -o - "$BUILD_ROOT/notary-status.json")
-  echo "Notarization status ($attempt/$NOTARY_MAX_ATTEMPTS): $NOTARY_STATUS"
-
-  case "$NOTARY_STATUS" in
-    Accepted)
-      break
-      ;;
-    Invalid|Rejected)
-      xcrun notarytool log "$SUBMISSION_ID" \
-        --apple-id "$APPLE_ID" \
-        --team-id "$APPLE_TEAM_ID" \
-        --password "$APPLE_APP_PASSWORD" || true
-      exit 1
-      ;;
-    "In Progress")
-      sleep 30
-      ;;
-    *)
-      echo "Unexpected notarization status: $NOTARY_STATUS" >&2
-      exit 1
-      ;;
-  esac
-done
-
-if [[ "$NOTARY_STATUS" != "Accepted" ]]; then
-  echo "Notarization did not finish within 5.5 hours: $SUBMISSION_ID" >&2
-  exit 1
-fi
-
-xcrun stapler staple "$APP_PATH"
-xcrun stapler validate "$APP_PATH"
-
-ARCHIVE_NAME="$APP_NAME-$VERSION.zip"
-ARCHIVE_PATH="$RELEASE_DIR/$ARCHIVE_NAME"
-ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ARCHIVE_PATH"
-spctl --assess --type execute --verbose=2 "$APP_PATH"
 
 GENERATE_APPCAST=$(find "$DERIVED_DATA/SourcePackages/artifacts" -type f -name generate_appcast -print -quit)
 if [[ -z "$GENERATE_APPCAST" ]]; then
   echo "Sparkle generate_appcast tool was not found" >&2
   exit 1
 fi
+cp "$GENERATE_APPCAST" "$PENDING_DIR/generate_appcast"
 
-DOWNLOAD_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION/"
-printf '%s' "$SPARKLE_PRIVATE_KEY" | "$GENERATE_APPCAST" "$RELEASE_DIR" \
-  --ed-key-file - \
-  --download-url-prefix "$DOWNLOAD_URL" \
-  --maximum-deltas 0 \
-  -o "$RELEASE_DIR/appcast.xml"
+printf '%s' "$VERSION" > "$PENDING_DIR/version"
+printf '%s' "$GITHUB_SHA" > "$PENDING_DIR/commit-sha"
 
-grep -q "$DOWNLOAD_URL$ARCHIVE_NAME" "$RELEASE_DIR/appcast.xml"
-grep -q 'sparkle:edSignature=' "$RELEASE_DIR/appcast.xml"
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+  printf 'Submitted Meetingnotes %s for Apple notarization.\n\nSubmission: `%s`\n\nThe finalize workflow will publish the release after Apple accepts it.\n' \
+    "$VERSION" "$SUBMISSION_ID" >> "$GITHUB_STEP_SUMMARY"
+fi
 
-echo "Release artifacts are ready in $RELEASE_DIR"
+echo "Signed app and notarization metadata are ready in $PENDING_DIR"
