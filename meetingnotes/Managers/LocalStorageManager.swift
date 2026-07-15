@@ -53,7 +53,13 @@ class LocalStorageManager {
             let tmpURL = fileURL.appendingPathExtension("tmp")
             try data.write(to: tmpURL, options: .atomic)
             if FileManager.default.fileExists(atPath: fileURL.path) {
-                try FileManager.default.replaceItem(at: fileURL, withItemAt: tmpURL)
+                try FileManager.default.replaceItem(
+                    at: fileURL,
+                    withItemAt: tmpURL,
+                    backupItemName: nil,
+                    options: [],
+                    resultingItemURL: nil
+                )
             } else {
                 try FileManager.default.moveItem(at: tmpURL, to: fileURL)
             }
@@ -201,7 +207,13 @@ class LocalStorageManager {
             let tmpURL = fileURL.appendingPathExtension("tmp")
             try data.write(to: tmpURL, options: .atomic)
             if FileManager.default.fileExists(atPath: fileURL.path) {
-                try FileManager.default.replaceItem(at: fileURL, withItemAt: tmpURL)
+                try FileManager.default.replaceItem(
+                    at: fileURL,
+                    withItemAt: tmpURL,
+                    backupItemName: nil,
+                    options: [],
+                    resultingItemURL: nil
+                )
             } else {
                 try FileManager.default.moveItem(at: tmpURL, to: fileURL)
             }
