@@ -141,7 +141,7 @@ final class ProcessTap {
             if processObjectIDs.isEmpty {
                 logger.warning("System audio tap configured with an empty list of processObjectIDs. This might not capture any audio or behave unexpectedly.")
             }
-            tapDescription = CATapDescription(stereoMixdownOfProcesses: processObjectIDs)
+            tapDescription = CATapDescription(monoMixdownOfProcesses: processObjectIDs)
             logger.debug("Configuring tap for system audio output using \(processObjectIDs.count) explicit processes.")
         }
         
@@ -496,4 +496,4 @@ final class ProcessTapRecorder {
             self.currentAudioLevel = 0.0
         }
     }
-} 
+}

@@ -48,6 +48,17 @@ enum CoderAPIError: LocalizedError {
 final class CoderAPIClient {
     static let shared = CoderAPIClient()
 
+    struct Transcription {
+        struct Segment: Decodable {
+            let start: TimeInterval
+            let end: TimeInterval
+            let text: String
+        }
+
+        let text: String
+        let segments: [Segment]
+    }
+
     private struct ModelsResponse: Decodable {
         let data: [CoderModel]
     }
@@ -59,9 +70,17 @@ final class CoderAPIClient {
 
     private struct TranscriptionResponse: Decodable {
         let text: String
+        let segments: [Transcription.Segment]?
     }
 
-    private init() {}
+    private let transcriptionSession: URLSession
+
+    private init() {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 2 * 60 * 60
+        configuration.timeoutIntervalForResource = 2 * 60 * 60
+        transcriptionSession = URLSession(configuration: configuration)
+    }
 
     func models(baseURL: String, apiKey: String) async throws -> [CoderModel] {
         var request = URLRequest(url: try endpoint(baseURL: baseURL, path: "models"))
@@ -128,7 +147,7 @@ final class CoderAPIClient {
         }
     }
 
-    func transcribe(fileURL: URL, model: String, language: String = "en") async throws -> String {
+    func transcribe(fileURL: URL, model: String, language: String = "en") async throws -> Transcription {
         let selectedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !selectedModel.isEmpty else { throw CoderAPIError.missingModel("transcription") }
         let apiKey = try requiredAPIKey(KeychainHelper.shared.getCoderAPIKey() ?? "")
@@ -149,9 +168,10 @@ final class CoderAPIClient {
            let size = attributes[.size] as? NSNumber {
             request.setValue(size.stringValue, forHTTPHeaderField: "Content-Length")
         }
-        let (data, response) = try await URLSession.shared.upload(for: request, fromFile: bodyURL)
+        let (data, response) = try await transcriptionSession.upload(for: request, fromFile: bodyURL)
         try validate(response: response, data: data)
-        return try JSONDecoder().decode(TranscriptionResponse.self, from: data).text
+        let decoded = try JSONDecoder().decode(TranscriptionResponse.self, from: data)
+        return Transcription(text: decoded.text, segments: decoded.segments ?? [])
     }
 
     private func endpoint(baseURL: String, path: String) throws -> URL {
@@ -194,6 +214,7 @@ final class CoderAPIClient {
         }
         try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n\(model)\r\n")
         try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\n\(language)\r\n")
+        try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\nverbose_json\r\n")
         try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(audioURL.lastPathComponent)\"\r\nContent-Type: audio/mp4\r\n\r\n")
         let input = try FileHandle(forReadingFrom: audioURL)
         defer { try? input.close() }

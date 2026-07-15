@@ -34,6 +34,7 @@ final class AudioManager: NSObject, ObservableObject {
     private var systemAudioFile: AVAudioFile?
     private var micAudioURL: URL?
     private var systemAudioURL: URL?
+    private var recordingStartedAt = Date()
 
     private override init() {
         super.init()
@@ -53,9 +54,10 @@ final class AudioManager: NSObject, ObservableObject {
     }
 
     func startRecording() {
-        sessionID = UUID()
         errorMessage = nil
         cancelCapture(removeFiles: true)
+        sessionID = UUID()
+        recordingStartedAt = Date()
         do {
             try prepareAudioFiles()
             startMicrophoneTap()
@@ -67,11 +69,12 @@ final class AudioManager: NSObject, ObservableObject {
     }
 
     func stopRecordingAndTranscribe() async -> [TranscriptChunk] {
+        let completedSessionID = sessionID
+        let captureStartedAt = recordingStartedAt
         let files = stopCaptureAndCloseFiles()
         isProcessing = true
         defer {
             isProcessing = false
-            removeAudioFiles(files.compactMap { $0 })
         }
 
         let model = UserDefaultsManager.shared.transcriptionModel
@@ -85,18 +88,42 @@ final class AudioManager: NSObject, ObservableObject {
         for (source, result) in zip([AudioSource.mic, .system], results) {
             guard let result else { continue }
             switch result {
-            case .success(let text):
-                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty {
-                    updated.append(TranscriptChunk(source: source, text: trimmed, isFinal: true))
+            case .success(let transcription):
+                if transcription.segments.isEmpty {
+                    let text = transcription.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !text.isEmpty {
+                        updated.append(TranscriptChunk(timestamp: captureStartedAt, source: source, text: text, isFinal: true))
+                    }
+                } else {
+                    for segment in transcription.segments {
+                        let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !text.isEmpty else { continue }
+                        updated.append(TranscriptChunk(
+                            timestamp: captureStartedAt.addingTimeInterval(max(0, segment.start)),
+                            source: source,
+                            text: text,
+                            isFinal: true
+                        ))
+                    }
                 }
             case .failure(let error):
                 failures.append("\(source.displayName): \(error.localizedDescription)")
             }
         }
+        updated.sort {
+            if $0.timestamp != $1.timestamp { return $0.timestamp < $1.timestamp }
+            return $0.source.rawValue < $1.source.rawValue
+        }
         transcriptChunks = updated
-        if !failures.isEmpty {
-            errorMessage = "Transcription failed for " + failures.joined(separator: "; ")
+        let completedFiles = files.compactMap { $0 }
+        if failures.isEmpty {
+            removeAudioFiles(completedFiles)
+        } else {
+            let recoveryFolder = preserveAudioFiles(completedFiles, sessionID: completedSessionID)
+            let recoveryMessage = recoveryFolder == nil
+                ? " The audio remains in the app's temporary folder."
+                : " Audio was saved in Documents/Meetingnotes-Recovery/\(completedSessionID.uuidString)."
+            errorMessage = "Transcription failed for " + failures.joined(separator: "; ") + recoveryMessage
         }
         return updated
     }
@@ -105,7 +132,7 @@ final class AudioManager: NSObject, ObservableObject {
         cancelCapture(removeFiles: true)
     }
         
-    private func transcribe(_ fileURL: URL?, model: String) async -> Result<String, Error>? {
+    private func transcribe(_ fileURL: URL?, model: String) async -> Result<CoderAPIClient.Transcription, Error>? {
         guard let fileURL else { return nil }
         do {
             return .success(try await CoderAPIClient.shared.transcribe(fileURL: fileURL, model: model))
@@ -388,6 +415,31 @@ final class AudioManager: NSObject, ObservableObject {
 
     private func removeAudioFiles(_ urls: [URL]) {
         for url in urls { try? FileManager.default.removeItem(at: url) }
+    }
+
+    private func preserveAudioFiles(_ urls: [URL], sessionID: UUID) -> URL? {
+        guard !urls.isEmpty,
+              let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let folder = documents
+            .appendingPathComponent("Meetingnotes-Recovery", isDirectory: true)
+            .appendingPathComponent(sessionID.uuidString, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        } catch {
+            return nil
+        }
+        var preservedCount = 0
+        for url in urls {
+            do {
+                try FileManager.default.moveItem(at: url, to: folder.appendingPathComponent(url.lastPathComponent))
+                preservedCount += 1
+            } catch {
+                continue
+            }
+        }
+        return preservedCount > 0 ? folder : nil
     }
         
     private func resetAudioLevels() {
