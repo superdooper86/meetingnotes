@@ -86,7 +86,46 @@ xcrun notarytool submit "$PRE_NOTARY_ZIP" \
   --apple-id "$APPLE_ID" \
   --team-id "$APPLE_TEAM_ID" \
   --password "$APPLE_APP_PASSWORD" \
-  --wait
+  --output-format json > "$BUILD_ROOT/notary-submission.json"
+
+SUBMISSION_ID=$(plutil -extract id raw -o - "$BUILD_ROOT/notary-submission.json")
+echo "Notarization submitted: $SUBMISSION_ID"
+
+NOTARY_STATUS="In Progress"
+for attempt in {1..180}; do
+  xcrun notarytool info "$SUBMISSION_ID" \
+    --apple-id "$APPLE_ID" \
+    --team-id "$APPLE_TEAM_ID" \
+    --password "$APPLE_APP_PASSWORD" \
+    --output-format json > "$BUILD_ROOT/notary-status.json"
+  NOTARY_STATUS=$(plutil -extract status raw -o - "$BUILD_ROOT/notary-status.json")
+  echo "Notarization status ($attempt/180): $NOTARY_STATUS"
+
+  case "$NOTARY_STATUS" in
+    Accepted)
+      break
+      ;;
+    Invalid|Rejected)
+      xcrun notarytool log "$SUBMISSION_ID" \
+        --apple-id "$APPLE_ID" \
+        --team-id "$APPLE_TEAM_ID" \
+        --password "$APPLE_APP_PASSWORD" || true
+      exit 1
+      ;;
+    "In Progress")
+      sleep 30
+      ;;
+    *)
+      echo "Unexpected notarization status: $NOTARY_STATUS" >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [[ "$NOTARY_STATUS" != "Accepted" ]]; then
+  echo "Notarization did not finish within 90 minutes: $SUBMISSION_ID" >&2
+  exit 1
+fi
 
 xcrun stapler staple "$APP_PATH"
 xcrun stapler validate "$APP_PATH"
