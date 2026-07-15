@@ -33,9 +33,16 @@ struct TemplateEditView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    TextField("Meeting Context", text: $template.context, axis: .vertical)
-                        .textFieldStyle(.roundedBorder)
-                        .lineLimit(4...10)
+                    TextEditor(text: $template.context)
+                        .scrollContentBackground(.hidden)
+                        .padding(8)
+                        .frame(height: 140)
+                        .background(Color.secondary.opacity(0.06))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
                 
                 // Sections
@@ -75,9 +82,16 @@ struct TemplateEditView: View {
                                     TextField("Section Title", text: $section.title)
                                         .textFieldStyle(.roundedBorder)
                                     
-                                    TextField("Section Description", text: $section.description, axis: .vertical)
-                                        .textFieldStyle(.roundedBorder)
-                                        .lineLimit(3...8)
+                                    TextEditor(text: $section.description)
+                                        .scrollContentBackground(.hidden)
+                                        .padding(8)
+                                        .frame(height: 90)
+                                        .background(Color.secondary.opacity(0.06))
+                                        .overlay {
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+                                        }
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
                                 }
                                 
                                 Button {
@@ -113,11 +127,18 @@ struct TemplateEditView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.top)
-                .disabled(template.title.isEmpty || template.sections.isEmpty)
+                .disabled(!canSave)
             }
             .padding(24)
         }
         .navigationTitle("Edit Template")
+    }
+
+    private var canSave: Bool {
+        let hasTitle = !template.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasInstructions = !template.context.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !template.sections.isEmpty
+        return hasTitle && hasInstructions
     }
 }
 
