@@ -2,15 +2,15 @@ import SwiftUI
 
 struct TemplateListView: View {
     @StateObject private var viewModel = TemplatesViewModel()
-    @Environment(\.dismiss) private var dismiss
+    @State private var editingTemplate: NoteTemplate?
     
     var body: some View {
         List {
             ForEach(viewModel.templates) { template in
                 HStack {
-                    NavigationLink(destination: TemplateEditView(template: template) { updatedTemplate in
-                        viewModel.saveTemplate(updatedTemplate)
-                    }) {
+                    Button {
+                        presentEditor(for: template)
+                    } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 Text(template.title)
@@ -36,6 +36,7 @@ struct TemplateListView: View {
                         }
                         .padding(.vertical, 4)
                     }
+                    .buttonStyle(.plain)
                     
                     Spacer()
 
@@ -87,9 +88,9 @@ struct TemplateListView: View {
         .navigationTitle("Note Templates")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                NavigationLink(destination: TemplateEditView(template: viewModel.createNewTemplate()) { updatedTemplate in
-                    viewModel.saveTemplate(updatedTemplate)
-                }) {
+                Button {
+                    presentEditor(for: viewModel.createNewTemplate())
+                } label: {
                     Image(systemName: "plus")
                 }
             }
@@ -106,6 +107,19 @@ struct TemplateListView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
+        .sheet(item: $editingTemplate) { template in
+            NavigationStack {
+                TemplateEditView(template: template) { updatedTemplate in
+                    viewModel.saveTemplate(updatedTemplate)
+                }
+            }
+            .frame(minWidth: 680, minHeight: 620)
+        }
+    }
+
+    private func presentEditor(for template: NoteTemplate) {
+        guard editingTemplate == nil else { return }
+        editingTemplate = template
     }
 }
 
