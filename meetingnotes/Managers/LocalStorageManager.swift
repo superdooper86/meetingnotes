@@ -6,6 +6,11 @@ import Foundation
 /// Manages local file storage for meetings and app data
 class LocalStorageManager {
     static let shared = LocalStorageManager()
+
+    struct MeetingImportResult {
+        let importedCount: Int
+        let skippedCount: Int
+    }
     
     private let documentsDirectory: URL
     private let meetingsDirectory: URL
@@ -47,7 +52,17 @@ class LocalStorageManager {
             // Write atomically using a temp file then replace
             let tmpURL = fileURL.appendingPathExtension("tmp")
             try data.write(to: tmpURL, options: .atomic)
-            try FileManager.default.replaceItem(at: fileURL, withItemAt: tmpURL, backupItemName: nil, options: [], resultingItemURL: nil)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try FileManager.default.replaceItem(
+                    at: fileURL,
+                    withItemAt: tmpURL,
+                    backupItemName: nil,
+                    options: [],
+                    resultingItemURL: nil
+                )
+            } else {
+                try FileManager.default.moveItem(at: tmpURL, to: fileURL)
+            }
 
             print("✅ Saved meeting: \(meeting.id)")
             return true
@@ -128,6 +143,51 @@ class LocalStorageManager {
             return false
         }
     }
+
+    /// Imports meeting JSON files from a folder selected by the user.
+    func importMeetings(from directory: URL) throws -> MeetingImportResult {
+        let didStartAccess = directory.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccess {
+                directory.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let existingIDs = Set(loadMeetings().map(\.id))
+        var importedIDs = Set<UUID>()
+        var skippedCount = 0
+
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else {
+            throw CocoaError(.fileReadUnknown)
+        }
+
+        for case let fileURL as URL in enumerator where fileURL.pathExtension.lowercased() == "json" {
+            do {
+                let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
+                guard values.isRegularFile == true else { continue }
+                let data = try Data(contentsOf: fileURL)
+                let meeting = try decoder.decode(Meeting.self, from: data)
+                guard meeting.dataVersion <= Meeting.currentDataVersion,
+                      !existingIDs.contains(meeting.id),
+                      !importedIDs.contains(meeting.id),
+                      saveMeeting(meeting) else {
+                    skippedCount += 1
+                    continue
+                }
+                importedIDs.insert(meeting.id)
+            } catch {
+                skippedCount += 1
+            }
+        }
+
+        return MeetingImportResult(importedCount: importedIDs.count, skippedCount: skippedCount)
+    }
     
     // MARK: - Template Management
     
@@ -146,7 +206,17 @@ class LocalStorageManager {
             // Write atomically using a temp file then replace
             let tmpURL = fileURL.appendingPathExtension("tmp")
             try data.write(to: tmpURL, options: .atomic)
-            try FileManager.default.replaceItem(at: fileURL, withItemAt: tmpURL, backupItemName: nil, options: [], resultingItemURL: nil)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try FileManager.default.replaceItem(
+                    at: fileURL,
+                    withItemAt: tmpURL,
+                    backupItemName: nil,
+                    options: [],
+                    resultingItemURL: nil
+                )
+            } else {
+                try FileManager.default.moveItem(at: tmpURL, to: fileURL)
+            }
             
             print("✅ Saved template: \(template.id)")
             return true
@@ -241,4 +311,4 @@ class LocalStorageManager {
     var meetingsDirectoryURL: URL {
         meetingsDirectory
     }
-} 
+}

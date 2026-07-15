@@ -134,12 +134,25 @@ Open the project in Xcode. Command+R to build it and run it.
 
 ## Releasing a New Version
 
-Follow these steps to create a new release with auto-updates:
+Production releases are Developer ID signed, notarized by Apple, published to
+GitHub Releases, and signed for Sparkle auto-updates.
 
 ### Prerequisites
 
-- Homebrew packages: `brew install create-dmg sparkle`
-- Make scripts executable: `chmod +x scripts/update_version.sh scripts/build_release.sh`
+- Apple Developer Program membership
+- A Developer ID Application certificate exported from Keychain Access as a
+  password-protected `.p12`
+- An Apple ID app-specific password for notarization
+- GitHub CLI: `brew install gh`
+
+Configure the Apple release secrets once:
+
+```bash
+./scripts/configure_github_release_secrets.sh
+```
+
+The Sparkle private key is stored only as the `SPARKLE_PRIVATE_KEY` Actions
+secret. Its matching public key is committed in `meetingnotes/Info.plist`.
 
 ### Release Process
 
@@ -159,31 +172,19 @@ Follow these steps to create a new release with auto-updates:
    ./scripts/update_version.sh custom 1.2.0
    ```
 
-2. **Build the release:**
+2. Commit and push the version change to `main`.
 
-   ```bash
-   ./scripts/build_release.sh
-   ```
+3. Run the `Release` workflow from GitHub Actions and enter the version without
+   the `v` prefix. The workflow signs and notarizes the app, generates the
+   signed appcast, creates the version tag, and publishes both release assets.
 
-   This will:
+The app checks
+`https://github.com/superdooper86/meetingnotes/releases/latest/download/appcast.xml`
+and installs later releases automatically through Sparkle.
 
-   - Clean build the app in Release mode
-   - Create a signed DMG file
-   - Generate the appcast.xml for auto-updates
+### Recovering Meetings
 
-3. **Create GitHub Release:**
-
-   - Go to [GitHub Releases](https://github.com/owengretzinger/meetingnotes/releases)
-   - Click "Create a new release"
-   - Tag: `v1.0.1` (match the version number)
-   - Title: `Meetingnotes v1.0.1`
-   - Upload the DMG and zip files from `releases/` folder
-   - Generate release notes
-
-4. **Update appcast:**
-
-   ```bash
-   git add appcast.xml
-   git commit -m "Update appcast for v1.0.1"
-   git push
-   ```
+The first Developer ID signed build may not automatically inherit data from an
+older ad-hoc signed build. In Settings, use **Import Meetings...** and select the
+old `Meetings` folder. After this one-time transition, the stable signing
+identity keeps the same sandbox container across updates.
