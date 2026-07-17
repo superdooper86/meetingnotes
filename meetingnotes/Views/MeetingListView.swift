@@ -327,7 +327,7 @@ struct MeetingDetailContentView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(viewModel.meeting.transcript.isEmpty || viewModel.isGeneratingNotes || viewModel.isRecording || viewModel.isProcessing || viewModel.isStartingRecording)
-                        .help("Generate enhanced notes using a template")
+                        .help("Generate meeting notes using a template")
                         
                         // Recording Button
                         Button(action: {
@@ -374,7 +374,7 @@ struct MeetingDetailContentView: View {
                     
                     Spacer()
                     
-                    // Edit/Preview button (for My Notes and Enhanced Notes)
+                    // Edit/Preview button (for My Notes and Meeting Notes)
                     if viewModel.selectedTab == .myNotes || viewModel.selectedTab == .enhancedNotes {
                         Button(action: {
                             isEditing.toggle()

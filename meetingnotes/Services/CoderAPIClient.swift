@@ -97,7 +97,11 @@ final class CoderAPIClient {
         )
     }
 
-    func streamChat(systemPrompt: String, model: String) -> AsyncThrowingStream<String, Error> {
+    func streamChat(
+        systemPrompt: String,
+        userPrompt: String = "Create the meeting notes now.",
+        model: String
+    ) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             Task {
                 do {
@@ -113,7 +117,7 @@ final class CoderAPIClient {
                         "model": selectedModel,
                         "messages": [
                             ["role": "system", "content": systemPrompt],
-                            ["role": "user", "content": "Create the meeting notes now."]
+                            ["role": "user", "content": userPrompt]
                         ],
                         "stream": true
                     ])

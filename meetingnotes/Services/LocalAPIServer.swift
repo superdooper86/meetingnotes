@@ -309,8 +309,27 @@ private final class LocalRecordingController {
                     generatedNotes = ""
                 }
             }
+            var meetingChanged = false
             if !generatedNotes.isEmpty {
                 meeting.generatedNotes = generatedNotes
+                meetingChanged = true
+            }
+            if meeting.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                do {
+                    if let title = try await NotesGenerator.shared.generateMeetingTitle(
+                        meeting: meeting,
+                        generatedNotes: generatedNotes,
+                        templateId: meeting.templateId
+                    ) {
+                        meeting.title = title
+                        meetingChanged = true
+                    }
+                } catch {
+                    // The recording and generated notes remain valid without a generated title.
+                    print("Meeting title generation failed: \(error)")
+                }
+            }
+            if meetingChanged {
                 _ = LocalStorageManager.shared.saveMeeting(meeting)
                 NotificationCenter.default.post(name: .meetingSaved, object: meeting)
             }

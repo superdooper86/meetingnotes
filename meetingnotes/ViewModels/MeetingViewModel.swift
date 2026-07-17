@@ -12,7 +12,7 @@ extension Notification.Name {
 enum MeetingViewTab: String, CaseIterable {
     case myNotes = "My Notes"
     case transcript = "Transcript"
-    case enhancedNotes = "Enhanced Notes"
+    case enhancedNotes = "Meeting Notes"
 }
 
 
@@ -260,10 +260,28 @@ class MeetingViewModel: ObservableObject {
         
         // Only save if there was no error
         if !hasError {
+            await generateTitleIfNeeded()
             saveMeeting()
         }
         
         isGeneratingNotes = false
+    }
+
+    private func generateTitleIfNeeded() async {
+        guard meeting.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        do {
+            if let title = try await NotesGenerator.shared.generateMeetingTitle(
+                meeting: meeting,
+                generatedNotes: meeting.generatedNotes,
+                templateId: selectedTemplateId
+            ) {
+                meeting.title = title
+            }
+        } catch {
+            // A title is helpful but should never prevent completed notes from being saved.
+            print("Meeting title generation failed: \(error)")
+        }
     }
     
     func saveMeeting() {

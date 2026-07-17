@@ -105,6 +105,88 @@ class NotesGenerator {
             }
         }
     }
+
+    /// Generates a short title after meeting notes have been created.
+    func generateMeetingTitle(
+        meeting: Meeting,
+        generatedNotes: String,
+        templateId: UUID?
+    ) async throws -> String? {
+        let templates = LocalStorageManager.shared.loadTemplates()
+        let template = templateId.flatMap { id in
+            templates.first(where: { $0.id == id })
+        }
+        let meetingContext: String
+        if let template {
+            meetingContext = "\(template.title): \(template.context)"
+        } else {
+            meetingContext = "General meeting"
+        }
+
+        let trimmedNotes = generatedNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        let meetingContent = trimmedNotes.isEmpty ? meeting.formattedTranscript : trimmedNotes
+        guard !meetingContent.isEmpty else { return nil }
+
+        let systemPrompt = """
+        Create a concise, descriptive title for a recorded meeting from its context and content.
+        Return only the title in 3 to 8 words. Do not use quotation marks, Markdown, or a trailing period.
+        Avoid generic titles such as Meeting, Discussion, Meeting Notes, or Untitled Meeting.
+        """
+        let userPrompt = """
+        Meeting context:
+        \(meetingContext)
+
+        Meeting content:
+        \(meetingContent)
+        """
+
+        var generatedTitle = ""
+        let stream = CoderAPIClient.shared.streamChat(
+            systemPrompt: systemPrompt,
+            userPrompt: userPrompt,
+            model: UserDefaultsManager.shared.notesModel
+        )
+        for try await content in stream {
+            generatedTitle += content
+        }
+
+        return normalizedTitle(generatedTitle)
+    }
+
+    private func normalizedTitle(_ value: String) -> String? {
+        guard var title = value
+            .split(whereSeparator: \Character.isNewline)
+            .map(String.init)
+            .first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })?
+            .trimmingCharacters(in: .whitespacesAndNewlines) else {
+            return nil
+        }
+
+        while title.hasPrefix("#") {
+            title.removeFirst()
+            title = title.trimmingCharacters(in: .whitespaces)
+        }
+        if title.lowercased().hasPrefix("title:") {
+            title = String(title.dropFirst("title:".count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        title = title.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        if title.hasSuffix(".") {
+            title.removeLast()
+        }
+
+        if title.count > 80 {
+            let prefix = String(title.prefix(80))
+            if let lastSpace = prefix.lastIndex(of: " ") {
+                title = String(prefix[..<lastSpace])
+            } else {
+                title = prefix
+            }
+        }
+
+        title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? nil : title
+    }
     
     /// Validates if the Coder service token is configured
     /// - Returns: True if API key exists, false otherwise
@@ -115,4 +197,4 @@ class NotesGenerator {
         }
         return true
     }
-} 
+}
