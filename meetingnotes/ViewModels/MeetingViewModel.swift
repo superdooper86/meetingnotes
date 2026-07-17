@@ -54,15 +54,6 @@ class MeetingViewModel: ObservableObject {
     
     private let recordingSessionManager = RecordingSessionManager.shared
     private var cancellables = Set<AnyCancellable>()
-    private var isNewMeeting = false
-    
-    // Computed property to check if meeting is empty
-    var isEmpty: Bool {
-        return meeting.transcriptChunks.isEmpty && 
-               meeting.userNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && 
-               meeting.generatedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-               meeting.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
     
     init(meeting: Meeting = Meeting()) {
         // Load the latest version of the meeting from storage if it exists
@@ -75,9 +66,6 @@ class MeetingViewModel: ObservableObject {
         }
         
 
-        
-        // Detect if this is a new meeting based on content, not storage existence
-        isNewMeeting = isEmpty
         
         // Set initial tab based on notes existence
         if !self.meeting.generatedNotes.isEmpty {
@@ -333,12 +321,4 @@ class MeetingViewModel: ObservableObject {
         }
     }
     
-    func deleteIfEmpty() {
-        if isEmpty && !isRecording && !isProcessing {
-            print("🗑️ Auto-deleting empty meeting")
-            deleteMeeting()
-        } else {
-            saveMeeting()
-        }
-    }
 }

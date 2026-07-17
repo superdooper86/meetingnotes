@@ -445,8 +445,9 @@ struct MeetingDetailContentView: View {
             Text("Are you sure you want to delete this meeting? This action cannot be undone.")
         }
         .onDisappear {
-            // Auto-delete empty meetings when leaving, otherwise save
-            viewModel.deleteIfEmpty()
+            // A failed recording may still be empty. Keep it until the user
+            // explicitly deletes it so app updates cannot erase history.
+            viewModel.saveMeeting()
         }
     }
     
