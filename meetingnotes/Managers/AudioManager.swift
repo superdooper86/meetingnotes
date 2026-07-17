@@ -309,7 +309,7 @@ final class AudioManager: NSObject, ObservableObject {
         try tap.run(on: tapQueue) { [weak self] _, inputData, _, _, _ in
             guard let self else { return }
             self.processAudioBuffer(
-                { AVAudioPCMBuffer(pcmFormat: inputFormat, bufferListNoCopy: inputData, deallocator: nil) },
+                { self.copyAudioBuffer(from: inputData, format: inputFormat) },
                 converter: converter,
                 targetFormat: targetFormat,
                 source: .system
@@ -319,6 +319,42 @@ final class AudioManager: NSObject, ObservableObject {
             Task { await self.restartSystemAudioTap() }
         }
     }
+
+    private func copyAudioBuffer(
+        from inputData: UnsafePointer<AudioBufferList>,
+        format: AVAudioFormat
+    ) -> AVAudioPCMBuffer? {
+        guard let borrowedBuffer = AVAudioPCMBuffer(
+            pcmFormat: format,
+            bufferListNoCopy: inputData,
+            deallocator: nil
+        ), borrowedBuffer.frameLength > 0,
+        let ownedBuffer = AVAudioPCMBuffer(
+            pcmFormat: format,
+            frameCapacity: borrowedBuffer.frameLength
+        ) else { return nil }
+
+        ownedBuffer.frameLength = borrowedBuffer.frameLength
+        let sourceBuffers = UnsafeMutableAudioBufferListPointer(
+            UnsafeMutablePointer(mutating: inputData)
+        )
+        let destinationBuffers = UnsafeMutableAudioBufferListPointer(
+            ownedBuffer.mutableAudioBufferList
+        )
+        guard sourceBuffers.count == destinationBuffers.count else { return nil }
+
+        for index in 0..<sourceBuffers.count {
+            let source = sourceBuffers[index]
+            let destination = destinationBuffers[index]
+            let byteCount = Int(source.mDataByteSize)
+            guard byteCount <= Int(destination.mDataByteSize),
+                  let sourceData = source.mData,
+                  let destinationData = destination.mData else { return nil }
+            memcpy(destinationData, sourceData, byteCount)
+            destinationBuffers[index].mDataByteSize = source.mDataByteSize
+        }
+        return ownedBuffer
+    }
     
     private func processAudioBuffer(
         _ inputBufferProvider: () -> AVAudioPCMBuffer?,
@@ -326,8 +362,8 @@ final class AudioManager: NSObject, ObservableObject {
         targetFormat: AVAudioFormat,
         source: AudioSource
     ) {
-        // Keep callback-owned buffers alive until conversion finishes. Teardown
-        // takes this same lock before invalidating the Core Audio process tap.
+        // The system callback copies its borrowed Core Audio memory while this
+        // lock prevents teardown, then conversion operates on the owned copy.
         audioFileLock.lock()
         defer { audioFileLock.unlock() }
         guard isAcceptingAudio,
