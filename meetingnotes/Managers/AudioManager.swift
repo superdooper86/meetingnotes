@@ -302,12 +302,12 @@ final class AudioManager: NSObject, ObservableObject {
     private func startTapIO(_ tap: ProcessTap) throws {
         guard var description = tap.tapStreamDescription,
               let inputFormat = AVAudioFormat(streamDescription: &description),
-              let targetFormat = systemAudioFile?.processingFormat,
-              let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+              let targetFormat = systemAudioFile?.processingFormat else {
             throw NSError(domain: "AudioManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unsupported system audio format"])
         }
         try tap.run(on: tapQueue) { [weak self] _, inputData, _, _, _ in
-            guard let self else { return }
+            guard let self,
+                  let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else { return }
             self.processAudioBuffer(
                 { self.copyAudioBuffer(from: inputData, format: inputFormat) },
                 converter: converter,
