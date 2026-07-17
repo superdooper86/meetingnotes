@@ -183,9 +183,13 @@ final class AudioManager: NSObject, ObservableObject {
                 throw NSError(domain: "AudioManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unsupported microphone format"])
             }
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
-                guard let self, buffer.frameLength > 0 else { return }
-                self.updateAudioLevel(buffer, source: .mic)
-                self.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat, source: .mic)
+                guard let self else { return }
+                self.processAudioBuffer(
+                    { buffer },
+                    converter: converter,
+                    targetFormat: targetFormat,
+                    source: .mic
+                )
             }
             audioEngine.prepare()
             try audioEngine.start()
@@ -303,11 +307,13 @@ final class AudioManager: NSObject, ObservableObject {
             throw NSError(domain: "AudioManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unsupported system audio format"])
         }
         try tap.run(on: tapQueue) { [weak self] _, inputData, _, _, _ in
-            guard let self,
-                  let buffer = AVAudioPCMBuffer(pcmFormat: inputFormat, bufferListNoCopy: inputData, deallocator: nil),
-                  buffer.frameLength > 0 else { return }
-            self.updateAudioLevel(buffer, source: .system)
-            self.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat, source: .system)
+            guard let self else { return }
+            self.processAudioBuffer(
+                { AVAudioPCMBuffer(pcmFormat: inputFormat, bufferListNoCopy: inputData, deallocator: nil) },
+                converter: converter,
+                targetFormat: targetFormat,
+                source: .system
+            )
         } invalidationHandler: { [weak self] _ in
             guard let self, !self.isRestartingSystemTap, self.isRecording else { return }
             Task { await self.restartSystemAudioTap() }
@@ -315,11 +321,20 @@ final class AudioManager: NSObject, ObservableObject {
     }
     
     private func processAudioBuffer(
-        _ inputBuffer: AVAudioPCMBuffer,
+        _ inputBufferProvider: () -> AVAudioPCMBuffer?,
         converter: AVAudioConverter,
         targetFormat: AVAudioFormat,
         source: AudioSource
     ) {
+        // Keep callback-owned buffers alive until conversion finishes. Teardown
+        // takes this same lock before invalidating the Core Audio process tap.
+        audioFileLock.lock()
+        defer { audioFileLock.unlock() }
+        guard isAcceptingAudio,
+              let inputBuffer = inputBufferProvider(),
+              inputBuffer.frameLength > 0 else { return }
+
+        updateAudioLevel(inputBuffer, source: source)
         let ratio = targetFormat.sampleRate / inputBuffer.format.sampleRate
         let capacity = max(1, AVAudioFrameCount(ceil(Double(inputBuffer.frameLength) * ratio)))
         guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) else { return }
@@ -336,11 +351,6 @@ final class AudioManager: NSObject, ObservableObject {
         }
         guard status != .error, conversionError == nil, outputBuffer.frameLength > 0 else { return }
 
-        audioFileLock.lock()
-        defer { audioFileLock.unlock() }
-        guard isAcceptingAudio else {
-            return
-        }
         do {
             switch source {
             case .mic:
@@ -378,8 +388,8 @@ final class AudioManager: NSObject, ObservableObject {
         pendingMicRestart = nil
         AudioLevelManager.shared.updateRecordingState(false)
 
-        // Stop new writes and wait for any callback already writing before
-        // AVAudioFile is finalized and released.
+        // Stop new callbacks and wait for any active conversion/write before
+        // invalidating callback-owned buffers or finalizing AVAudioFile.
         audioFileLock.lock()
         isAcceptingAudio = false
         audioFileLock.unlock()
