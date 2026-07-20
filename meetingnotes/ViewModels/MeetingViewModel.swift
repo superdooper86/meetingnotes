@@ -25,6 +25,8 @@ class MeetingViewModel: ObservableObject {
     @Published private var recordingStateChanged = false // Trigger SwiftUI updates
     @Published var isValidatingKey = false // Indicates API key validation in progress
     @Published var isStartingRecording = false // Indicates recording start in progress
+    @Published var isRetryingTranscription = false
+    @Published private(set) var recoveryAudioFolderURL: URL?
     
     // Computed property to determine if Generate button should animate
     var shouldAnimateGenerateButton: Bool {
@@ -44,7 +46,13 @@ class MeetingViewModel: ObservableObject {
     }
 
     var isProcessing: Bool {
-        return recordingSessionManager.isProcessing && recordingSessionManager.activeMeetingId == meeting.id
+        return isRetryingTranscription ||
+            (recordingSessionManager.isProcessing && recordingSessionManager.activeMeetingId == meeting.id)
+    }
+
+    var canRetryTranscription: Bool {
+        recoveryAudioFolderURL != nil &&
+            !isRecording && !isProcessing && !isStartingRecording && !isValidatingKey
     }
     @Published var selectedTab: MeetingViewTab = .transcript  // Default to transcript tab
 
@@ -76,6 +84,7 @@ class MeetingViewModel: ObservableObject {
         
         // Load templates and selected template
         loadTemplates()
+        refreshRecoveryAudioFolder()
         // Observe template selection: save to meeting and regenerate notes on changes (skip initial)
         $selectedTemplateId
             .dropFirst()
@@ -205,11 +214,52 @@ class MeetingViewModel: ObservableObject {
         Task {
             let chunks = await recordingSessionManager.stopRecording()
             meeting.transcriptChunks = chunks
+            meeting.recoveryAudioFolderName = recordingSessionManager.lastRecoveryAudioFolderName
+            refreshRecoveryAudioFolder()
             saveMeeting()
             if !meeting.formattedTranscript.isEmpty {
                 await generateNotes()
             }
             isStartingRecording = false
+        }
+    }
+
+    func retryTranscription() {
+        guard let recoveryAudioFolderURL, canRetryTranscription else { return }
+
+        isRetryingTranscription = true
+        errorMessage = nil
+        Task {
+            defer { isRetryingTranscription = false }
+            do {
+                let chunks = try await AudioManager.shared.transcribeRecoveryAudio(
+                    in: recoveryAudioFolderURL,
+                    captureStartedAt: meeting.date
+                )
+                meeting.transcriptChunks = chunks
+                meeting.recoveryAudioFolderName = recoveryAudioFolderURL.lastPathComponent
+                selectedTab = .transcript
+
+                guard saveMeeting() else {
+                    throw CocoaError(.fileWriteUnknown)
+                }
+
+                LocalStorageManager.shared.deleteRecoveryAudioFolder(recoveryAudioFolderURL)
+                meeting.recoveryAudioFolderName = nil
+                self.recoveryAudioFolderURL = nil
+                saveMeeting()
+                await generateNotes()
+            } catch {
+                errorMessage = error.localizedDescription
+                print("Retry transcription failed: \(error)")
+            }
+        }
+    }
+
+    private func refreshRecoveryAudioFolder() {
+        recoveryAudioFolderURL = LocalStorageManager.shared.findRecoveryAudioFolder(for: meeting)
+        if let recoveryAudioFolderURL {
+            meeting.recoveryAudioFolderName = recoveryAudioFolderURL.lastPathComponent
         }
     }
     
@@ -284,14 +334,16 @@ class MeetingViewModel: ObservableObject {
         }
     }
     
-    func saveMeeting() {
-        if isDeleted { return }
+    @discardableResult
+    func saveMeeting() -> Bool {
+        if isDeleted { return false }
         print("💾 Saving meeting: \(meeting.id)")
         let success = LocalStorageManager.shared.saveMeeting(meeting)
         print("💾 Save result: \(success ? "SUCCESS" : "FAILED")")
         if success {
             NotificationCenter.default.post(name: .meetingSaved, object: meeting)
         }
+        return success
     }
     
     func copyCurrentTabContent() {

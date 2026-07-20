@@ -112,6 +112,10 @@ class RecordingSessionManager: ObservableObject {
     func isRecordingMeeting(_ meetingId: UUID) -> Bool {
         return isRecording && activeMeetingId == meetingId
     }
+
+    var lastRecoveryAudioFolderName: String? {
+        audioManager.lastRecoveryAudioFolderName
+    }
     
     private func updateActiveMeetingTranscript(meetingId: UUID, chunks: [TranscriptChunk]) {
         // Load all meetings

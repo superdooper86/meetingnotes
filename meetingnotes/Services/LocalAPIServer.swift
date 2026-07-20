@@ -286,6 +286,7 @@ private final class LocalRecordingController {
         }
 
         meeting.transcriptChunks = chunks
+        meeting.recoveryAudioFolderName = recordingManager.lastRecoveryAudioFolderName
         let templates = LocalStorageManager.shared.loadTemplates()
         if meeting.templateId == nil {
             meeting.templateId = LocalStorageManager.shared.preferredTemplateID(in: templates)

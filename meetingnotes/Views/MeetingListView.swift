@@ -259,6 +259,17 @@ struct MeetingDetailContentView: View {
                     
                     // Ellipsis menu
                     Menu {
+                        if viewModel.recoveryAudioFolderURL != nil {
+                            Button {
+                                viewModel.retryTranscription()
+                            } label: {
+                                Label("Retry Transcription", systemImage: "arrow.clockwise")
+                            }
+                            .disabled(!viewModel.canRetryTranscription)
+
+                            Divider()
+                        }
+
                         Button("Delete Meeting", role: .destructive) {
                             showDeleteAlert = true
                         }

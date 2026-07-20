@@ -3,6 +3,23 @@ import Combine
 import Foundation
 import SwiftUI
 
+private enum RecoveryTranscriptionError: LocalizedError {
+    case noAudioFiles
+    case noSpeech
+    case requestFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .noAudioFiles:
+            return "The saved recovery audio could not be found."
+        case .noSpeech:
+            return "No speech was detected in the saved recovery audio."
+        case .requestFailed(let details):
+            return "Retry transcription failed for \(details)"
+        }
+    }
+}
+
 /// Captures microphone and system audio locally, then sends completed files to Coder.
 @MainActor
 final class AudioManager: NSObject, ObservableObject {
@@ -14,6 +31,7 @@ final class AudioManager: NSObject, ObservableObject {
     @Published var errorMessage: String?
     @Published var micAudioLevel: Float = 0
     @Published var systemAudioLevel: Float = 0
+    private(set) var lastRecoveryAudioFolderName: String?
     
     private var audioEngine = AVAudioEngine()
     private var sessionID = UUID()
@@ -55,6 +73,7 @@ final class AudioManager: NSObject, ObservableObject {
 
     func startRecording() {
         errorMessage = nil
+        lastRecoveryAudioFolderName = nil
         cancelCapture(removeFiles: true)
         sessionID = UUID()
         recordingStartedAt = Date()
@@ -83,7 +102,77 @@ final class AudioManager: NSObject, ObservableObject {
         let (micTranscription, systemTranscription) = await (micResult, systemResult)
         let results = [micTranscription, systemTranscription]
 
-        var updated = transcriptChunks.filter(\.isFinal)
+        let (updated, failures) = buildTranscriptChunks(
+            from: results,
+            captureStartedAt: captureStartedAt,
+            existingChunks: transcriptChunks.filter(\.isFinal)
+        )
+        transcriptChunks = updated
+        let completedFiles = files.compactMap { $0 }
+        if failures.isEmpty {
+            lastRecoveryAudioFolderName = nil
+            removeAudioFiles(completedFiles)
+        } else {
+            let recoveryFolder = preserveAudioFiles(completedFiles, sessionID: completedSessionID)
+            lastRecoveryAudioFolderName = recoveryFolder?.lastPathComponent
+            let recoveryMessage = recoveryFolder == nil
+                ? " The audio remains in the app's temporary folder."
+                : " Audio was saved in Documents/Meetingnotes-Recovery/\(completedSessionID.uuidString)."
+            errorMessage = "Transcription failed for " + failures.joined(separator: "; ") + recoveryMessage
+        }
+        return updated
+    }
+
+    func transcribeRecoveryAudio(in folder: URL, captureStartedAt: Date) async throws -> [TranscriptChunk] {
+        let recoveryFiles = LocalStorageManager.shared.recoveryAudioFiles(in: folder)
+        guard !recoveryFiles.isEmpty else {
+            throw RecoveryTranscriptionError.noAudioFiles
+        }
+
+        isProcessing = true
+        defer { isProcessing = false }
+        let model = UserDefaultsManager.shared.transcriptionModel
+        let micURL = recoveryFiles.first(where: { $0.source == .mic })?.url
+        let systemURL = recoveryFiles.first(where: { $0.source == .system })?.url
+        async let micResult = transcribe(micURL, model: model)
+        async let systemResult = transcribe(systemURL, model: model)
+        let (micTranscription, systemTranscription) = await (micResult, systemResult)
+        let results = [micTranscription, systemTranscription]
+        let (chunks, failures) = buildTranscriptChunks(
+            from: results,
+            captureStartedAt: captureStartedAt,
+            existingChunks: []
+        )
+
+        if !failures.isEmpty {
+            throw RecoveryTranscriptionError.requestFailed(failures.joined(separator: "; "))
+        }
+        guard !chunks.isEmpty else {
+            throw RecoveryTranscriptionError.noSpeech
+        }
+        return chunks
+    }
+
+    func cancelRecording() {
+        cancelCapture(removeFiles: true)
+        lastRecoveryAudioFolderName = nil
+    }
+
+    private func transcribe(_ fileURL: URL?, model: String) async -> Result<CoderAPIClient.Transcription, Error>? {
+        guard let fileURL else { return nil }
+        do {
+            return .success(try await CoderAPIClient.shared.transcribe(fileURL: fileURL, model: model))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    private func buildTranscriptChunks(
+        from results: [Result<CoderAPIClient.Transcription, Error>?],
+        captureStartedAt: Date,
+        existingChunks: [TranscriptChunk]
+    ) -> ([TranscriptChunk], [String]) {
+        var updated = existingChunks
         var failures: [String] = []
         for (source, result) in zip([AudioSource.mic, .system], results) {
             guard let result else { continue }
@@ -114,31 +203,7 @@ final class AudioManager: NSObject, ObservableObject {
             if $0.timestamp != $1.timestamp { return $0.timestamp < $1.timestamp }
             return $0.source.rawValue < $1.source.rawValue
         }
-        transcriptChunks = updated
-        let completedFiles = files.compactMap { $0 }
-        if failures.isEmpty {
-            removeAudioFiles(completedFiles)
-        } else {
-            let recoveryFolder = preserveAudioFiles(completedFiles, sessionID: completedSessionID)
-            let recoveryMessage = recoveryFolder == nil
-                ? " The audio remains in the app's temporary folder."
-                : " Audio was saved in Documents/Meetingnotes-Recovery/\(completedSessionID.uuidString)."
-            errorMessage = "Transcription failed for " + failures.joined(separator: "; ") + recoveryMessage
-        }
-        return updated
-    }
-    
-    func cancelRecording() {
-        cancelCapture(removeFiles: true)
-    }
-        
-    private func transcribe(_ fileURL: URL?, model: String) async -> Result<CoderAPIClient.Transcription, Error>? {
-        guard let fileURL else { return nil }
-        do {
-            return .success(try await CoderAPIClient.shared.transcribe(fileURL: fileURL, model: model))
-        } catch {
-            return .failure(error)
-        }
+        return (updated, failures)
     }
     
     private func prepareAudioFiles() throws {
