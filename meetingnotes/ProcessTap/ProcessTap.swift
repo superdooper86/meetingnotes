@@ -5,7 +5,7 @@ import AVFoundation
 
 enum TapTarget {
     case singleProcess(AudioProcess)
-    case systemAudio(processObjectIDs: [AudioObjectID])
+    case systemAudio
 
     var displayName: String {
         switch self {
@@ -137,12 +137,9 @@ final class ProcessTap {
         case .singleProcess(let process):
             tapDescription = CATapDescription(stereoMixdownOfProcesses: [process.objectID])
             logger.debug("Configuring tap for single process objectID: \(process.objectID)")
-        case .systemAudio(let processObjectIDs):
-            if processObjectIDs.isEmpty {
-                logger.warning("System audio tap configured with an empty list of processObjectIDs. This might not capture any audio or behave unexpectedly.")
-            }
-            tapDescription = CATapDescription(monoMixdownOfProcesses: processObjectIDs)
-            logger.debug("Configuring tap for system audio output using \(processObjectIDs.count) explicit processes.")
+        case .systemAudio:
+            tapDescription = CATapDescription(monoGlobalTapButExcludeProcesses: [])
+            logger.debug("Configuring a global system audio tap.")
         }
         
         tapDescription.uuid = UUID()

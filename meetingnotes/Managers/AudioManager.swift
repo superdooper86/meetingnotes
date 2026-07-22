@@ -36,18 +36,14 @@ final class AudioManager: NSObject, ObservableObject {
     private var audioEngine = AVAudioEngine()
     private var sessionID = UUID()
     private var processTap: ProcessTap?
-    private let audioProcessController = AudioProcessController()
     private let permission = AudioRecordingPermission()
     private let tapQueue = DispatchQueue(label: "io.meetingnotes.audiotap", qos: .userInitiated)
     private let audioFileLock = NSLock()
     private var isTapActive = false
-    private var isRestartingSystemTap = false
     private var isAcceptingAudio = false
     private var micRetryCount = 0
     private var pendingMicRestart: DispatchWorkItem?
     private let maxMicRetries = 3
-    private var cancellables = Set<AnyCancellable>()
-    
     private var micAudioFile: AVAudioFile?
     private var systemAudioFile: AVAudioFile?
     private var micAudioURL: URL?
@@ -57,14 +53,6 @@ final class AudioManager: NSObject, ObservableObject {
     private override init() {
         super.init()
         observeAudioEngine()
-        audioProcessController.activate()
-        NSWorkspace.shared.publisher(for: \.runningApplications)
-            .debounce(for: .seconds(1), scheduler: RunLoop.main)
-            .sink { [weak self] _ in
-                guard let self, self.isTapActive else { return }
-                Task { await self.restartSystemAudioTapIfNeeded() }
-            }
-            .store(in: &cancellables)
     }
 
     deinit {
@@ -304,8 +292,7 @@ final class AudioManager: NSObject, ObservableObject {
             return
         }
         
-        let processIDs = audioProcessController.processes.map(\.objectID)
-        let newTap = ProcessTap(target: .systemAudio(processObjectIDs: processIDs))
+        let newTap = ProcessTap(target: .systemAudio)
         newTap.activate()
         if let tapError = newTap.errorMessage {
             errorMessage = "Failed to activate system audio capture: \(tapError)"
@@ -329,21 +316,8 @@ final class AudioManager: NSObject, ObservableObject {
         }
     }
     
-    private func restartSystemAudioTapIfNeeded() async {
-        let next = Set(audioProcessController.processes.map(\.objectID))
-        let current: Set<AudioObjectID>
-        if case .systemAudio(let processIDs) = processTap?.target {
-            current = Set(processIDs)
-        } else {
-            current = []
-        }
-        if next != current { await restartSystemAudioTap() }
-    }
-
     private func restartSystemAudioTap() async {
         guard isRecording else { return }
-        isRestartingSystemTap = true
-        defer { isRestartingSystemTap = false }
         if isTapActive {
             processTap?.invalidate()
             processTap = nil
@@ -380,7 +354,7 @@ final class AudioManager: NSObject, ObservableObject {
                 source: .system
             )
         } invalidationHandler: { [weak self] _ in
-            guard let self, !self.isRestartingSystemTap, self.isRecording else { return }
+            guard let self, self.isRecording else { return }
             Task { await self.restartSystemAudioTap() }
         }
     }
