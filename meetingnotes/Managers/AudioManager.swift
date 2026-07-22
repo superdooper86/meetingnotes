@@ -35,6 +35,7 @@ final class AudioManager: NSObject, ObservableObject {
     
     private var audioEngine = AVAudioEngine()
     private var sessionID = UUID()
+    private var meetingID = UUID()
     private var processTap: ProcessTap?
     private let permission = AudioRecordingPermission()
     private let tapQueue = DispatchQueue(label: "io.meetingnotes.audiotap", qos: .userInitiated)
@@ -59,11 +60,12 @@ final class AudioManager: NSObject, ObservableObject {
         NotificationCenter.default.removeObserver(self)
     }
 
-    func startRecording() {
+    func startRecording(for meetingID: UUID) {
         errorMessage = nil
         lastRecoveryAudioFolderName = nil
         cancelCapture(removeFiles: true)
         sessionID = UUID()
+        self.meetingID = meetingID
         recordingStartedAt = Date()
         do {
             try prepareAudioFiles()
@@ -76,7 +78,7 @@ final class AudioManager: NSObject, ObservableObject {
     }
 
     func stopRecordingAndTranscribe() async -> [TranscriptChunk] {
-        let completedSessionID = sessionID
+        let completedMeetingID = meetingID
         let captureStartedAt = recordingStartedAt
         let files = stopCaptureAndCloseFiles()
         isProcessing = true
@@ -97,16 +99,15 @@ final class AudioManager: NSObject, ObservableObject {
         )
         transcriptChunks = updated
         let completedFiles = files.compactMap { $0 }
-        if failures.isEmpty {
-            lastRecoveryAudioFolderName = nil
-            removeAudioFiles(completedFiles)
-        } else {
-            let recoveryFolder = preserveAudioFiles(completedFiles, sessionID: completedSessionID)
-            lastRecoveryAudioFolderName = recoveryFolder?.lastPathComponent
-            let recoveryMessage = recoveryFolder == nil
+        let audioFolder = preserveAudioFiles(completedFiles, meetingID: completedMeetingID)
+        lastRecoveryAudioFolderName = audioFolder?.lastPathComponent
+        if !failures.isEmpty {
+            let recoveryMessage = audioFolder == nil
                 ? " The audio remains in the app's temporary folder."
-                : " Audio was saved in Documents/Meetingnotes-Recovery/\(completedSessionID.uuidString)."
+                : " Audio was kept for three days. Use Show Audio Folder in the Meetingnotes menu to find it."
             errorMessage = "Transcription failed for " + failures.joined(separator: "; ") + recoveryMessage
+        } else if audioFolder == nil, !completedFiles.isEmpty {
+            errorMessage = "The transcript completed, but Meetingnotes could not move the audio into its three-day storage folder."
         }
         return updated
     }
@@ -502,29 +503,8 @@ final class AudioManager: NSObject, ObservableObject {
         for url in urls { try? FileManager.default.removeItem(at: url) }
     }
 
-    private func preserveAudioFiles(_ urls: [URL], sessionID: UUID) -> URL? {
-        guard !urls.isEmpty,
-              let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            return nil
-        }
-        let folder = documents
-            .appendingPathComponent("Meetingnotes-Recovery", isDirectory: true)
-            .appendingPathComponent(sessionID.uuidString, isDirectory: true)
-        do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        } catch {
-            return nil
-        }
-        var preservedCount = 0
-        for url in urls {
-            do {
-                try FileManager.default.moveItem(at: url, to: folder.appendingPathComponent(url.lastPathComponent))
-                preservedCount += 1
-            } catch {
-                continue
-            }
-        }
-        return preservedCount > 0 ? folder : nil
+    private func preserveAudioFiles(_ urls: [URL], meetingID: UUID) -> URL? {
+        LocalStorageManager.shared.preserveAudioFiles(urls, for: meetingID)
     }
         
     private func resetAudioLevels() {

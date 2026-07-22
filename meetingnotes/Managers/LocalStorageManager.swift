@@ -2,6 +2,7 @@
 // Handles local storage of meetings and app data
 
 import Foundation
+import AppKit
 
 /// Manages local file storage for meetings and app data
 class LocalStorageManager {
@@ -16,6 +17,7 @@ class LocalStorageManager {
     private let meetingsDirectory: URL
     private let templatesDirectory: URL
     private let recoveryDirectory: URL
+    private let audioRetentionInterval: TimeInterval = 3 * 24 * 60 * 60
     
     private init() {
         // Get the app's documents directory
@@ -28,7 +30,7 @@ class LocalStorageManager {
         // Create templates subdirectory
         templatesDirectory = documentsDirectory.appendingPathComponent("Templates")
 
-        recoveryDirectory = documentsDirectory.appendingPathComponent("Meetingnotes-Recovery")
+        recoveryDirectory = documentsDirectory.appendingPathComponent("Meetingnotes Audio")
         
         // Ensure directories exist
         try? FileManager.default.createDirectory(at: meetingsDirectory,
@@ -37,6 +39,8 @@ class LocalStorageManager {
                                                withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: recoveryDirectory,
                                                withIntermediateDirectories: true)
+        migrateLegacyRecoveryAudio()
+        purgeExpiredAudioFolders()
     }
     
     // MARK: - Meeting Management
@@ -151,6 +155,66 @@ class LocalStorageManager {
 
     // MARK: - Recovery Audio
 
+    func preserveAudioFiles(_ urls: [URL], for meetingID: UUID) -> URL? {
+        guard !urls.isEmpty else { return nil }
+        purgeExpiredAudioFolders()
+
+        let folder = recoveryDirectory.appendingPathComponent(meetingID.uuidString, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        } catch {
+            return nil
+        }
+
+        var preservedCount = 0
+        for url in urls {
+            let destination = folder.appendingPathComponent(url.lastPathComponent)
+            do {
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    try FileManager.default.removeItem(at: destination)
+                }
+                try FileManager.default.moveItem(at: url, to: destination)
+                preservedCount += 1
+            } catch {
+                continue
+            }
+        }
+        return preservedCount > 0 ? folder : nil
+    }
+
+    func purgeExpiredAudioFolders(now: Date = Date()) {
+        guard let folders = try? FileManager.default.contentsOfDirectory(
+            at: recoveryDirectory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        let expirationDate = now.addingTimeInterval(-audioRetentionInterval)
+        for folder in folders {
+            guard (try? folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
+            let audioFiles = recoveryAudioFiles(in: folder)
+            let newestDate = audioFiles.compactMap { file -> Date? in
+                let values = try? file.url.resourceValues(forKeys: [.contentModificationDateKey, .creationDateKey])
+                return values?.contentModificationDate ?? values?.creationDate
+            }.max()
+
+            guard let newestDate else {
+                try? FileManager.default.removeItem(at: folder)
+                continue
+            }
+            if newestDate < expirationDate {
+                try? FileManager.default.removeItem(at: folder)
+            }
+        }
+    }
+
+    @MainActor
+    func showAudioFolderInFinder(_ folder: URL? = nil) {
+        let target = folder ?? recoveryDirectory
+        try? FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(target)
+    }
+
     func recoveryAudioFolder(named name: String) -> URL? {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty,
@@ -243,6 +307,22 @@ class LocalStorageManager {
             return
         }
         try? FileManager.default.removeItem(at: folder)
+    }
+
+    private func migrateLegacyRecoveryAudio() {
+        let legacyDirectory = documentsDirectory.appendingPathComponent("Meetingnotes-Recovery", isDirectory: true)
+        guard let folders = try? FileManager.default.contentsOfDirectory(
+            at: legacyDirectory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        for folder in folders {
+            let destination = recoveryDirectory.appendingPathComponent(folder.lastPathComponent, isDirectory: true)
+            guard !FileManager.default.fileExists(atPath: destination.path) else { continue }
+            try? FileManager.default.moveItem(at: folder, to: destination)
+        }
+        try? FileManager.default.removeItem(at: legacyDirectory)
     }
 
     /// Imports meeting JSON files from a folder selected by the user.

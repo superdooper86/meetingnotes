@@ -46,6 +46,10 @@ struct MeetingnotesApp: App {
         .commands {
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: updaterController.updater)
+                Divider()
+                Button("Show Audio Folder") {
+                    LocalStorageManager.shared.showAudioFolderInFinder()
+                }
             }
         }
 
@@ -77,6 +81,12 @@ private struct MeetingnotesMenu: View {
             MainWindowController.shared.show(using: openWindow)
         } label: {
             Label("Open Meetingnotes", systemImage: "macwindow")
+        }
+
+        Button {
+            LocalStorageManager.shared.showAudioFolderInFinder()
+        } label: {
+            Label("Show Audio Folder", systemImage: "folder")
         }
 
         Divider()

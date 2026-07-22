@@ -244,10 +244,6 @@ class MeetingViewModel: ObservableObject {
                     throw CocoaError(.fileWriteUnknown)
                 }
 
-                LocalStorageManager.shared.deleteRecoveryAudioFolder(recoveryAudioFolderURL)
-                meeting.recoveryAudioFolderName = nil
-                self.recoveryAudioFolderURL = nil
-                saveMeeting()
                 await generateNotes()
             } catch {
                 errorMessage = error.localizedDescription
@@ -261,6 +257,11 @@ class MeetingViewModel: ObservableObject {
         if let recoveryAudioFolderURL {
             meeting.recoveryAudioFolderName = recoveryAudioFolderURL.lastPathComponent
         }
+    }
+
+    func showAudioInFinder() {
+        guard let recoveryAudioFolderURL else { return }
+        LocalStorageManager.shared.showAudioFolderInFinder(recoveryAudioFolderURL)
     }
     
     func loadTemplates() {

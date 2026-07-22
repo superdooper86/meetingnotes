@@ -81,7 +81,7 @@ class RecordingSessionManager: ObservableObject {
         
         activeMeetingId = meetingId
         recordingStartedAt = Date()
-        audioManager.startRecording()
+        audioManager.startRecording(for: meetingId)
     }
     
     func stopRecording() async -> [TranscriptChunk] {

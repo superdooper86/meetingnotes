@@ -267,6 +267,12 @@ struct MeetingDetailContentView: View {
                             }
                             .disabled(!viewModel.canRetryTranscription)
 
+                            Button {
+                                viewModel.showAudioInFinder()
+                            } label: {
+                                Label("Show Audio in Finder", systemImage: "folder")
+                            }
+
                             Divider()
                         }
 
