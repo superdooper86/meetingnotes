@@ -128,6 +128,23 @@ struct SettingsView: View {
                     Text("Meeting Storage")
                         .font(.headline)
 
+                    LabeledContent("Audio retention") {
+                        Stepper(
+                            value: $viewModel.settings.audioRetentionDays,
+                            in: 1...365
+                        ) {
+                            Text("\(viewModel.settings.audioRetentionDays) \(viewModel.settings.audioRetentionDays == 1 ? "day" : "days")")
+                                .monospacedDigit()
+                                .frame(minWidth: 70, alignment: .trailing)
+                        }
+                    }
+
+                    Button {
+                        LocalStorageManager.shared.showAudioFolderInFinder()
+                    } label: {
+                        Label("Show Audio Folder", systemImage: "folder")
+                    }
+
                     Button {
                         showingMeetingImporter = true
                     } label: {

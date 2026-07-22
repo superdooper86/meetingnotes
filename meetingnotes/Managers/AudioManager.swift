@@ -102,12 +102,14 @@ final class AudioManager: NSObject, ObservableObject {
         let audioFolder = preserveAudioFiles(completedFiles, meetingID: completedMeetingID)
         lastRecoveryAudioFolderName = audioFolder?.lastPathComponent
         if !failures.isEmpty {
+            let retentionDays = UserDefaultsManager.shared.audioRetentionDays
+            let retentionUnit = retentionDays == 1 ? "day" : "days"
             let recoveryMessage = audioFolder == nil
                 ? " The audio remains in the app's temporary folder."
-                : " Audio was kept for three days. Use Show Audio Folder in the Meetingnotes menu to find it."
+                : " Audio was kept for \(retentionDays) \(retentionUnit). Use Show Audio Folder in the Meetingnotes menu to find it."
             errorMessage = "Transcription failed for " + failures.joined(separator: "; ") + recoveryMessage
         } else if audioFolder == nil, !completedFiles.isEmpty {
-            errorMessage = "The transcript completed, but Meetingnotes could not move the audio into its three-day storage folder."
+            errorMessage = "The transcript completed, but Meetingnotes could not move the audio into its retention folder."
         }
         return updated
     }

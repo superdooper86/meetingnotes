@@ -71,6 +71,7 @@ class SettingsViewModel: ObservableObject {
         // via computed properties when they're modified
         let coderSaved = KeychainHelper.shared.saveCoderAPIKey(settings.coderAPIKey)
         LocalAPIServer.shared.applyConfiguration()
+        LocalStorageManager.shared.purgeExpiredAudioFolders()
 
         if showMessage {
             if coderSaved {

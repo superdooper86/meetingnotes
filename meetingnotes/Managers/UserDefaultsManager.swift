@@ -23,6 +23,7 @@ class UserDefaultsManager {
         static let transcriptionModel = "transcriptionModel"
         static let muteDeckAPIEnabled = "muteDeckAPIEnabled"
         static let muteDeckAPIPort = "muteDeckAPIPort"
+        static let audioRetentionDays = "audioRetentionDays"
     }
     
     // MARK: - User Blurb
@@ -93,5 +94,13 @@ class UserDefaultsManager {
             return stored == 0 ? 9880 : stored
         }
         set { userDefaults.set(newValue, forKey: Keys.muteDeckAPIPort) }
+    }
+
+    var audioRetentionDays: Int {
+        get {
+            guard userDefaults.object(forKey: Keys.audioRetentionDays) != nil else { return 3 }
+            return min(max(userDefaults.integer(forKey: Keys.audioRetentionDays), 1), 365)
+        }
+        set { userDefaults.set(min(max(newValue, 1), 365), forKey: Keys.audioRetentionDays) }
     }
 }

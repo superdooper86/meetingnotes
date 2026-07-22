@@ -54,6 +54,11 @@ struct Settings: Codable {
         set { UserDefaultsManager.shared.muteDeckAPIPort = newValue }
     }
 
+    var audioRetentionDays: Int {
+        get { UserDefaultsManager.shared.audioRetentionDays }
+        set { UserDefaultsManager.shared.audioRetentionDays = newValue }
+    }
+
     // System prompt default loading
     static func defaultSystemPrompt() -> String {
         guard let path = Bundle.main.path(forResource: "DefaultSystemPrompt", ofType: "txt"),

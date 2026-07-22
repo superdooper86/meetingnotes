@@ -17,7 +17,6 @@ class LocalStorageManager {
     private let meetingsDirectory: URL
     private let templatesDirectory: URL
     private let recoveryDirectory: URL
-    private let audioRetentionInterval: TimeInterval = 3 * 24 * 60 * 60
     
     private init() {
         // Get the app's documents directory
@@ -189,7 +188,8 @@ class LocalStorageManager {
             options: [.skipsHiddenFiles]
         ) else { return }
 
-        let expirationDate = now.addingTimeInterval(-audioRetentionInterval)
+        let retentionInterval = TimeInterval(UserDefaultsManager.shared.audioRetentionDays) * 24 * 60 * 60
+        let expirationDate = now.addingTimeInterval(-retentionInterval)
         for folder in folders {
             guard (try? folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
             let audioFiles = recoveryAudioFiles(in: folder)
