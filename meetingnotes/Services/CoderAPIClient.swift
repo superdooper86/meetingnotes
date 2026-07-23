@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 
 struct CoderModel: Codable, Identifiable, Hashable {
@@ -73,6 +74,13 @@ final class CoderAPIClient {
         let segments: [Transcription.Segment]?
     }
 
+    private struct AudioChunk {
+        let url: URL
+        let offset: TimeInterval
+        let isTemporary: Bool
+    }
+
+    private let transcriptionChunkDuration: TimeInterval = 3 * 60
     private let transcriptionSession: URLSession
 
     private init() {
@@ -155,10 +163,67 @@ final class CoderAPIClient {
         let selectedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !selectedModel.isEmpty else { throw CoderAPIError.missingModel("transcription") }
         let apiKey = try requiredAPIKey(KeychainHelper.shared.getCoderAPIKey() ?? "")
+        let chunks = try makeAudioChunks(from: fileURL)
+        defer {
+            for chunk in chunks where chunk.isTemporary {
+                try? FileManager.default.removeItem(at: chunk.url)
+            }
+        }
+
+        var textParts: [String] = []
+        var segments: [Transcription.Segment] = []
+        var lastNormalizedText = ""
+        var consecutiveDuplicateCount = 0
+
+        for chunk in chunks {
+            let transcription = try await transcribeChunk(
+                chunk.url,
+                model: selectedModel,
+                language: language,
+                apiKey: apiKey
+            )
+            if transcription.segments.isEmpty {
+                let text = transcription.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty {
+                    textParts.append(text)
+                    segments.append(.init(start: chunk.offset, end: chunk.offset, text: text))
+                }
+                continue
+            }
+
+            for segment in transcription.segments {
+                let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else { continue }
+                let normalized = text.lowercased()
+                if normalized == lastNormalizedText {
+                    consecutiveDuplicateCount += 1
+                } else {
+                    lastNormalizedText = normalized
+                    consecutiveDuplicateCount = 1
+                }
+                guard consecutiveDuplicateCount <= 2 else { continue }
+                textParts.append(text)
+                segments.append(.init(
+                    start: segment.start + chunk.offset,
+                    end: segment.end + chunk.offset,
+                    text: text
+                ))
+            }
+        }
+
+        return Transcription(text: textParts.joined(separator: "\n"), segments: segments)
+    }
+
+    private func transcribeChunk(
+        _ fileURL: URL,
+        model: String,
+        language: String,
+        apiKey: String
+    ) async throws -> Transcription {
         let boundary = "Meetingnotes-\(UUID().uuidString)"
         let bodyURL = try makeMultipartBody(
             audioURL: fileURL,
-            model: selectedModel,
+            model: model,
             language: language,
             boundary: boundary
         )
@@ -176,6 +241,80 @@ final class CoderAPIClient {
         try validate(response: response, data: data)
         let decoded = try JSONDecoder().decode(TranscriptionResponse.self, from: data)
         return Transcription(text: decoded.text, segments: decoded.segments ?? [])
+    }
+
+    private func makeAudioChunks(from fileURL: URL) throws -> [AudioChunk] {
+        let input = try AVAudioFile(forReading: fileURL)
+        let format = input.processingFormat
+        guard format.sampleRate > 0 else {
+            return [AudioChunk(url: fileURL, offset: 0, isTemporary: false)]
+        }
+
+        let duration = Double(input.length) / format.sampleRate
+        guard duration > transcriptionChunkDuration else {
+            return [AudioChunk(url: fileURL, offset: 0, isTemporary: false)]
+        }
+
+        let framesPerChunk = AVAudioFramePosition(format.sampleRate * transcriptionChunkDuration)
+        var chunks: [AudioChunk] = []
+        var frameOffset: AVAudioFramePosition = 0
+
+        do {
+            while frameOffset < input.length {
+                let frameCount = min(framesPerChunk, input.length - frameOffset)
+                let chunkURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("meetingnotes-transcription-\(UUID().uuidString).m4a")
+                try writeAudioChunk(
+                    from: input,
+                    frameCount: frameCount,
+                    format: format,
+                    to: chunkURL
+                )
+                chunks.append(AudioChunk(
+                    url: chunkURL,
+                    offset: Double(frameOffset) / format.sampleRate,
+                    isTemporary: true
+                ))
+                frameOffset += frameCount
+            }
+            return chunks
+        } catch {
+            for chunk in chunks {
+                try? FileManager.default.removeItem(at: chunk.url)
+            }
+            throw error
+        }
+    }
+
+    private func writeAudioChunk(
+        from input: AVAudioFile,
+        frameCount: AVAudioFramePosition,
+        format: AVAudioFormat,
+        to outputURL: URL
+    ) throws {
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: format.sampleRate,
+            AVNumberOfChannelsKey: format.channelCount,
+            AVEncoderBitRateKey: 48_000 * max(1, Int(format.channelCount))
+        ]
+        let output = try AVAudioFile(
+            forWriting: outputURL,
+            settings: settings,
+            commonFormat: format.commonFormat,
+            interleaved: format.isInterleaved
+        )
+        var remaining = frameCount
+        while remaining > 0 {
+            let requestedFrames = AVAudioFrameCount(min(remaining, 8_192))
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: requestedFrames) else {
+                throw CoderAPIError.invalidResponse
+            }
+            try input.read(into: buffer, frameCount: requestedFrames)
+            guard buffer.frameLength > 0 else { break }
+            try output.write(from: buffer)
+            remaining -= AVAudioFramePosition(buffer.frameLength)
+        }
     }
 
     private func endpoint(baseURL: String, path: String) throws -> URL {
