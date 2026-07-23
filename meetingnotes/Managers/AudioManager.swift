@@ -344,12 +344,14 @@ final class AudioManager: NSObject, ObservableObject {
     private func startTapIO(_ tap: ProcessTap) throws {
         guard var description = tap.tapStreamDescription,
               let inputFormat = AVAudioFormat(streamDescription: &description),
-              let targetFormat = systemAudioFile?.processingFormat else {
+              let targetFormat = systemAudioFile?.processingFormat,
+              let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
             throw NSError(domain: "AudioManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unsupported system audio format"])
         }
         try tap.run(on: tapQueue) { [weak self] _, inputData, _, _, _ in
-            guard let self,
-                  let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else { return }
+            guard let self else { return }
+            // The tap queue is serial. Reusing the converter preserves its
+            // resampler state instead of discarding audio at every callback.
             self.processAudioBuffer(
                 { self.copyAudioBuffer(from: inputData, format: inputFormat) },
                 converter: converter,
