@@ -138,8 +138,11 @@ final class ProcessTap {
             tapDescription = CATapDescription(stereoMixdownOfProcesses: [process.objectID])
             logger.debug("Configuring tap for single process objectID: \(process.objectID)")
         case .systemAudio:
-            tapDescription = CATapDescription(monoGlobalTapButExcludeProcesses: [])
-            logger.debug("Configuring a global system audio tap.")
+            // Keep the HAL tap's buffer layout consistent with the default
+            // output stream. AudioManager performs the stereo-to-mono mix when
+            // it converts the captured audio to the 16 kHz transcription file.
+            tapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
+            logger.debug("Configuring a stereo global system audio tap.")
         }
         
         tapDescription.uuid = UUID()
