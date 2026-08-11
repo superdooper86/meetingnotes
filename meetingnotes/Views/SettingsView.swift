@@ -59,10 +59,16 @@ struct SettingsView: View {
                             }
                         }
 
-                        if viewModel.coderModels.first(where: { $0.id == viewModel.settings.transcriptionModel })?.supportsSpeakerDiarization == true {
-                            Label("Remote participants are labeled Speaker 1–4; your microphone is labeled Me.", systemImage: "person.2.wave.2")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                        if let selectedModel = viewModel.coderModels.first(where: { $0.id == viewModel.settings.transcriptionModel }) {
+                            if selectedModel.supportsSpeakerDiarization {
+                                Label("Remote participants are labeled Speaker 1–4; your microphone is labeled Me.", systemImage: "person.2.wave.2")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Label("Remote participants are labeled Them; your microphone is labeled Me.", systemImage: "person.2")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
                         }
                     }
 

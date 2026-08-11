@@ -79,13 +79,7 @@ class UserDefaultsManager {
     }
 
     var transcriptionModel: String {
-        get {
-            let stored = userDefaults.string(forKey: Keys.transcriptionModel)
-            if stored == "local-whisper/whisper-large-v3-turbo" {
-                return "local-parakeet/parakeet-tdt-0.6b-v3"
-            }
-            return stored ?? "local-parakeet/parakeet-tdt-0.6b-v3"
-        }
+        get { userDefaults.string(forKey: Keys.transcriptionModel) ?? "local-parakeet/parakeet-tdt-0.6b-v3" }
         set { userDefaults.set(newValue, forKey: Keys.transcriptionModel) }
     }
 
