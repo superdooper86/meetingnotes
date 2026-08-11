@@ -14,6 +14,9 @@ APP_PATH="$DERIVED_DATA/Build/Products/Release/$APP_NAME.app"
 required_variables=(
   VERSION
   SIGNING_IDENTITY
+  APPLE_ID
+  APPLE_TEAM_ID
+  APPLE_APP_PASSWORD
   SPARKLE_PRIVATE_KEY
   GITHUB_REPOSITORY
 )
@@ -80,6 +83,33 @@ ARCHIVE_NAME="$APP_NAME-$VERSION.zip"
 ARCHIVE_PATH="$RELEASE_DIR/$ARCHIVE_NAME"
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ARCHIVE_PATH"
 
+NOTARY_RESULT="$BUILD_ROOT/notary-result.json"
+xcrun notarytool submit "$ARCHIVE_PATH" \
+  --apple-id "$APPLE_ID" \
+  --team-id "$APPLE_TEAM_ID" \
+  --password "$APPLE_APP_PASSWORD" \
+  --wait \
+  --timeout 20m \
+  --output-format json > "$NOTARY_RESULT"
+
+NOTARY_STATUS=$(plutil -extract status raw -o - "$NOTARY_RESULT")
+if [[ "$NOTARY_STATUS" != "Accepted" ]]; then
+  submission_id=$(plutil -extract id raw -o - "$NOTARY_RESULT")
+  xcrun notarytool log "$submission_id" \
+    --apple-id "$APPLE_ID" \
+    --team-id "$APPLE_TEAM_ID" \
+    --password "$APPLE_APP_PASSWORD" || true
+  echo "Apple notarization failed with status: $NOTARY_STATUS" >&2
+  exit 1
+fi
+
+xcrun stapler staple "$APP_PATH"
+xcrun stapler validate "$APP_PATH"
+spctl --assess --type execute --verbose=2 "$APP_PATH"
+
+rm -f "$ARCHIVE_PATH"
+ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ARCHIVE_PATH"
+
 GENERATE_APPCAST=$(find "$DERIVED_DATA/SourcePackages/artifacts" -type f -name generate_appcast -print -quit)
 if [[ -z "$GENERATE_APPCAST" ]]; then
   echo "Sparkle generate_appcast tool was not found" >&2
@@ -97,8 +127,8 @@ grep -q "$DOWNLOAD_URL$ARCHIVE_NAME" "$RELEASE_DIR/appcast.xml"
 grep -q 'sparkle:edSignature=' "$RELEASE_DIR/appcast.xml"
 
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-  printf 'Built and Developer ID-signed Meetingnotes %s. The GitHub release is ready to publish.\n' \
+  printf 'Built, Developer ID-signed, notarized, and stapled Meetingnotes %s. The GitHub release is ready to publish.\n' \
     "$VERSION" >> "$GITHUB_STEP_SUMMARY"
 fi
 
-echo "Signed release artifacts are ready in $RELEASE_DIR"
+echo "Signed and notarized release artifacts are ready in $RELEASE_DIR"
