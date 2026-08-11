@@ -48,15 +48,23 @@ struct TranscriptChunk: Codable, Identifiable, Hashable {
     let id: UUID
     let timestamp: Date
     let source: AudioSource
+    let speaker: Int?
     let text: String
     let isFinal: Bool
     
-    init(id: UUID = UUID(), timestamp: Date = Date(), source: AudioSource, text: String, isFinal: Bool = false) {
+    init(id: UUID = UUID(), timestamp: Date = Date(), source: AudioSource, speaker: Int? = nil, text: String, isFinal: Bool = false) {
         self.id = id
         self.timestamp = timestamp
         self.source = source
+        self.speaker = speaker
         self.text = text
         self.isFinal = isFinal
+    }
+
+    var displayName: String {
+        if source == .mic { return "Me" }
+        if let speaker { return "Speaker \(speaker)" }
+        return source.displayName
     }
 }
 
@@ -64,13 +72,21 @@ struct CollapsedTranscriptChunk: Identifiable {
     let id: UUID
     let timestamp: Date
     let source: AudioSource
+    let speaker: Int?
     let combinedText: String
     
-    init(id: UUID = UUID(), timestamp: Date, source: AudioSource, combinedText: String) {
+    init(id: UUID = UUID(), timestamp: Date, source: AudioSource, speaker: Int? = nil, combinedText: String) {
         self.id = id
         self.timestamp = timestamp
         self.source = source
+        self.speaker = speaker
         self.combinedText = combinedText
+    }
+
+    var displayName: String {
+        if source == .mic { return "Me" }
+        if let speaker { return "Speaker \(speaker)" }
+        return source.displayName
     }
 }
 
@@ -115,7 +131,7 @@ struct Meeting: Codable, Identifiable, Hashable {
     var transcript: String {
         return transcriptChunks
             .filter { $0.isFinal }
-            .map { "[\($0.source.rawValue)] \($0.text)" }
+            .map { "[\($0.displayName)] \($0.text)" }
             .joined(separator: " ")
     }
     
@@ -124,7 +140,7 @@ struct Meeting: Codable, Identifiable, Hashable {
         let finalChunks = transcriptChunks.filter { $0.isFinal }
 
         return finalChunks.map { chunk in
-            "[\(TranscriptTimestampFormatter.string(from: chunk.timestamp))] \(chunk.source.copyPrefix): \(chunk.text)"
+            "[\(TranscriptTimestampFormatter.string(from: chunk.timestamp))] \(chunk.displayName): \(chunk.text)"
         }.joined(separator: "\n")
     }
     
@@ -135,6 +151,7 @@ struct Meeting: Codable, Identifiable, Hashable {
                 id: chunk.id,
                 timestamp: chunk.timestamp,
                 source: chunk.source,
+                speaker: chunk.speaker,
                 combinedText: chunk.text
             )
         }

@@ -21,6 +21,7 @@ struct CoderModel: Codable, Identifiable, Hashable {
 
     var supportsChat: Bool { capabilities.isEmpty || capabilities.contains("chat") }
     var supportsTranscription: Bool { capabilities.contains("audio_transcription") }
+    var supportsSpeakerDiarization: Bool { capabilities.contains("speaker_diarization") }
 }
 
 enum CoderAPIError: LocalizedError {
@@ -54,6 +55,7 @@ final class CoderAPIClient {
             let start: TimeInterval
             let end: TimeInterval
             let text: String
+            let speaker: Int?
         }
 
         let text: String
@@ -70,8 +72,16 @@ final class CoderAPIClient {
     }
 
     private struct TranscriptionResponse: Decodable {
+        struct Word: Decodable {
+            let word: String
+            let start: TimeInterval
+            let end: TimeInterval
+            let speaker: Int?
+        }
+
         let text: String
         let segments: [Transcription.Segment]?
+        let words: [Word]?
     }
 
     private struct AudioChunk {
@@ -159,11 +169,17 @@ final class CoderAPIClient {
         }
     }
 
-    func transcribe(fileURL: URL, model: String, language: String = "en") async throws -> Transcription {
+    func transcribe(
+        fileURL: URL,
+        model: String,
+        language: String = "en",
+        diarization: Bool = false,
+        maxSpeakerCount: Int = 4
+    ) async throws -> Transcription {
         let selectedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !selectedModel.isEmpty else { throw CoderAPIError.missingModel("transcription") }
         let apiKey = try requiredAPIKey(KeychainHelper.shared.getCoderAPIKey() ?? "")
-        let chunks = try makeAudioChunks(from: fileURL)
+        let chunks = try makeAudioChunks(from: fileURL, preserveSpeakerIdentity: diarization)
         defer {
             for chunk in chunks where chunk.isTemporary {
                 try? FileManager.default.removeItem(at: chunk.url)
@@ -180,13 +196,15 @@ final class CoderAPIClient {
                 chunk.url,
                 model: selectedModel,
                 language: language,
-                apiKey: apiKey
+                apiKey: apiKey,
+                diarization: diarization,
+                maxSpeakerCount: maxSpeakerCount
             )
             if transcription.segments.isEmpty {
                 let text = transcription.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !text.isEmpty {
                     textParts.append(text)
-                    segments.append(.init(start: chunk.offset, end: chunk.offset, text: text))
+                    segments.append(.init(start: chunk.offset, end: chunk.offset, text: text, speaker: nil))
                 }
                 continue
             }
@@ -206,7 +224,8 @@ final class CoderAPIClient {
                 segments.append(.init(
                     start: segment.start + chunk.offset,
                     end: segment.end + chunk.offset,
-                    text: text
+                    text: text,
+                    speaker: segment.speaker
                 ))
             }
         }
@@ -218,13 +237,17 @@ final class CoderAPIClient {
         _ fileURL: URL,
         model: String,
         language: String,
-        apiKey: String
+        apiKey: String,
+        diarization: Bool,
+        maxSpeakerCount: Int
     ) async throws -> Transcription {
         let boundary = "Meetingnotes-\(UUID().uuidString)"
         let bodyURL = try makeMultipartBody(
             audioURL: fileURL,
             model: model,
             language: language,
+            diarization: diarization,
+            maxSpeakerCount: maxSpeakerCount,
             boundary: boundary
         )
         defer { try? FileManager.default.removeItem(at: bodyURL) }
@@ -240,22 +263,18 @@ final class CoderAPIClient {
         let (data, response) = try await transcriptionSession.upload(for: request, fromFile: bodyURL)
         try validate(response: response, data: data)
         let decoded = try JSONDecoder().decode(TranscriptionResponse.self, from: data)
-        return Transcription(text: decoded.text, segments: decoded.segments ?? [])
+        let segments = decoded.segments ?? segments(from: decoded.words ?? [])
+        return Transcription(text: decoded.text, segments: segments)
     }
 
-    private func makeAudioChunks(from fileURL: URL) throws -> [AudioChunk] {
+    private func makeAudioChunks(from fileURL: URL, preserveSpeakerIdentity: Bool) throws -> [AudioChunk] {
         let input = try AVAudioFile(forReading: fileURL)
         let format = input.processingFormat
-        guard format.sampleRate > 0 else {
-            return [AudioChunk(url: fileURL, offset: 0, isTemporary: false)]
-        }
+        guard format.sampleRate > 0 else { throw CoderAPIError.invalidResponse }
 
-        let duration = Double(input.length) / format.sampleRate
-        guard duration > transcriptionChunkDuration else {
-            return [AudioChunk(url: fileURL, offset: 0, isTemporary: false)]
-        }
-
-        let framesPerChunk = AVAudioFramePosition(format.sampleRate * transcriptionChunkDuration)
+        let framesPerChunk = preserveSpeakerIdentity
+            ? max(1, input.length)
+            : AVAudioFramePosition(format.sampleRate * transcriptionChunkDuration)
         var chunks: [AudioChunk] = []
         var frameOffset: AVAudioFramePosition = 0
 
@@ -263,7 +282,7 @@ final class CoderAPIClient {
             while frameOffset < input.length {
                 let frameCount = min(framesPerChunk, input.length - frameOffset)
                 let chunkURL = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("meetingnotes-transcription-\(UUID().uuidString).m4a")
+                    .appendingPathComponent("meetingnotes-transcription-\(UUID().uuidString).wav")
                 try writeAudioChunk(
                     from: input,
                     frameCount: frameCount,
@@ -293,10 +312,13 @@ final class CoderAPIClient {
         to outputURL: URL
     ) throws {
         let settings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVFormatIDKey: kAudioFormatLinearPCM,
             AVSampleRateKey: format.sampleRate,
             AVNumberOfChannelsKey: format.channelCount,
-            AVEncoderBitRateKey: 48_000 * max(1, Int(format.channelCount))
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false
         ]
         let output = try AVAudioFile(
             forWriting: outputURL,
@@ -315,6 +337,51 @@ final class CoderAPIClient {
             try output.write(from: buffer)
             remaining -= AVAudioFramePosition(buffer.frameLength)
         }
+    }
+
+    private func segments(from words: [TranscriptionResponse.Word]) -> [Transcription.Segment] {
+        var result: [Transcription.Segment] = []
+        var currentWords: [String] = []
+        var currentStart: TimeInterval?
+        var currentEnd: TimeInterval = 0
+        var currentSpeaker: Int?
+
+        func flush() {
+            guard let start = currentStart, !currentWords.isEmpty else { return }
+            result.append(.init(
+                start: start,
+                end: currentEnd,
+                text: currentWords.joined(separator: " "),
+                speaker: currentSpeaker
+            ))
+            currentWords.removeAll(keepingCapacity: true)
+            currentStart = nil
+            currentEnd = 0
+            currentSpeaker = nil
+        }
+
+        for word in words {
+            let text = word.word.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            let speakerChanged = currentStart != nil && word.speaker != currentSpeaker
+            let longPause = currentStart != nil && word.start - currentEnd > 1.5
+            if speakerChanged || longPause { flush() }
+
+            if currentStart == nil {
+                currentStart = word.start
+                currentSpeaker = word.speaker
+            }
+            currentWords.append(text)
+            currentEnd = word.end
+
+            let sentenceEnded = text.last.map { ".!?".contains($0) } ?? false
+            let duration = currentEnd - (currentStart ?? currentEnd)
+            if currentWords.count >= 40 || (sentenceEnded && (currentWords.count >= 12 || duration >= 8)) {
+                flush()
+            }
+        }
+        flush()
+        return result
     }
 
     private func endpoint(baseURL: String, path: String) throws -> URL {
@@ -346,7 +413,14 @@ final class CoderAPIClient {
         }
     }
 
-    private func makeMultipartBody(audioURL: URL, model: String, language: String, boundary: String) throws -> URL {
+    private func makeMultipartBody(
+        audioURL: URL,
+        model: String,
+        language: String,
+        diarization: Bool,
+        maxSpeakerCount: Int,
+        boundary: String
+    ) throws -> URL {
         let bodyURL = FileManager.default.temporaryDirectory.appendingPathComponent("meetingnotes-upload-\(UUID().uuidString).body")
         _ = FileManager.default.createFile(atPath: bodyURL.path, contents: nil)
         let output = try FileHandle(forWritingTo: bodyURL)
@@ -358,7 +432,11 @@ final class CoderAPIClient {
         try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\n\(model)\r\n")
         try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\n\(language)\r\n")
         try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\nverbose_json\r\n")
-        try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(audioURL.lastPathComponent)\"\r\nContent-Type: audio/mp4\r\n\r\n")
+        if diarization {
+            try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"diarization\"\r\n\r\ntrue\r\n")
+            try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"max_speaker_count\"\r\n\r\n\(maxSpeakerCount)\r\n")
+        }
+        try write("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(audioURL.lastPathComponent)\"\r\nContent-Type: audio/wav\r\n\r\n")
         let input = try FileHandle(forReadingFrom: audioURL)
         defer { try? input.close() }
         while let chunk = try input.read(upToCount: 1 << 20), !chunk.isEmpty {

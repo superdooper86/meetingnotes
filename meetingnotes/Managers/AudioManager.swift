@@ -87,8 +87,8 @@ final class AudioManager: NSObject, ObservableObject {
         }
 
         let model = UserDefaultsManager.shared.transcriptionModel
-        async let micResult = transcribe(files[0], model: model)
-        async let systemResult = transcribe(files[1], model: model)
+        async let micResult = transcribe(files[0], model: model, diarization: false)
+        async let systemResult = transcribe(files[1], model: model, diarization: true)
         let (micTranscription, systemTranscription) = await (micResult, systemResult)
         let results = [micTranscription, systemTranscription]
 
@@ -125,8 +125,8 @@ final class AudioManager: NSObject, ObservableObject {
         let model = UserDefaultsManager.shared.transcriptionModel
         let micURL = recoveryFiles.first(where: { $0.source == .mic })?.url
         let systemURL = recoveryFiles.first(where: { $0.source == .system })?.url
-        async let micResult = transcribe(micURL, model: model)
-        async let systemResult = transcribe(systemURL, model: model)
+        async let micResult = transcribe(micURL, model: model, diarization: false)
+        async let systemResult = transcribe(systemURL, model: model, diarization: true)
         let (micTranscription, systemTranscription) = await (micResult, systemResult)
         let results = [micTranscription, systemTranscription]
         let (chunks, failures) = buildTranscriptChunks(
@@ -149,10 +149,19 @@ final class AudioManager: NSObject, ObservableObject {
         lastRecoveryAudioFolderName = nil
     }
 
-    private func transcribe(_ fileURL: URL?, model: String) async -> Result<CoderAPIClient.Transcription, Error>? {
+    private func transcribe(
+        _ fileURL: URL?,
+        model: String,
+        diarization: Bool
+    ) async -> Result<CoderAPIClient.Transcription, Error>? {
         guard let fileURL else { return nil }
         do {
-            return .success(try await CoderAPIClient.shared.transcribe(fileURL: fileURL, model: model))
+            return .success(try await CoderAPIClient.shared.transcribe(
+                fileURL: fileURL,
+                model: model,
+                diarization: diarization,
+                maxSpeakerCount: 4
+            ))
         } catch {
             return .failure(error)
         }
@@ -181,6 +190,7 @@ final class AudioManager: NSObject, ObservableObject {
                         updated.append(TranscriptChunk(
                             timestamp: captureStartedAt.addingTimeInterval(max(0, segment.start)),
                             source: source,
+                            speaker: source == .system ? segment.speaker : nil,
                             text: text,
                             isFinal: true
                         ))

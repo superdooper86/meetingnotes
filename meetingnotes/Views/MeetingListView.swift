@@ -208,12 +208,12 @@ struct CollapsedTranscriptChunkView: View {
                     .font(.caption)
                     .foregroundColor(chunk.source == .mic ? .blue : .orange)
                 
-                Text(chunk.source.displayName)
+                Text(chunk.displayName)
                     .font(.caption)
                     .fontWeight(.medium)
                     .foregroundColor(chunk.source == .mic ? .blue : .orange)
             }
-            .frame(width: 50, alignment: .leading)
+            .frame(width: 78, alignment: .leading)
             
             // Transcript text
             Text(chunk.combinedText)

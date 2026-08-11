@@ -58,6 +58,12 @@ struct SettingsView: View {
                                 Text(model.displayName).tag(model.id)
                             }
                         }
+
+                        if viewModel.coderModels.first(where: { $0.id == viewModel.settings.transcriptionModel })?.supportsSpeakerDiarization == true {
+                            Label("Remote participants are labeled Speaker 1–4; your microphone is labeled Me.", systemImage: "person.2.wave.2")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
 
                     Text("The token is stored locally in Keychain. Audio and note generation are sent only to this Coder service.")
